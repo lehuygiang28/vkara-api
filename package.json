@@ -1,17 +1,15 @@
 {
     "name": "vkara-api",
-    "version": "1.0.50",
+    "version": "0.0.1",
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1",
         "dev": "bun run --watch src/index.ts"
     },
     "dependencies": {
-        "elysia": "latest",
-        "ioredis": "^5.4.2",
-        "uuid": "^11.0.5"
+        "elysia": "^1.2.10",
+        "ioredis": "^5.4.2"
     },
     "devDependencies": {
-        "bun-types": "latest"
+        "bun-types": "^1.1.43"
     },
     "module": "src/index.js"
 }
