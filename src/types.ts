@@ -1,11 +1,16 @@
-import { ServerWebSocket } from 'bun';
+import { ElysiaWS } from 'elysia/dist/ws';
 
 export interface Room {
     id: string;
     password?: string;
-    clients: Set<ServerWebSocket>;
+    clients: Set<ElysiaWS>;
     videoQueue: string[];
     volume: number;
+}
+
+export interface ClientInfo {
+    roomId: string;
+    wsId: string;
 }
 
 export interface ServerState {
