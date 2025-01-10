@@ -2,7 +2,8 @@
     "name": "vkara-api",
     "version": "0.0.1",
     "scripts": {
-        "dev": "bun run --watch src/index.ts"
+        "dev": "bun run --watch src/index.ts",
+        "b": "bun build --compile --minify --minify-whitespace --minify-syntax --target bun --outfile server ./src/index.ts"
     },
     "dependencies": {
         "elysia": "^1.2.10",
