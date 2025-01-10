@@ -8,12 +8,31 @@ interface ClientInfo {
     roomId?: string;
 }
 
+export interface YouTubeVideo {
+    id: {
+        videoId: string;
+    };
+    snippet: {
+        title: string;
+        channelTitle: string;
+        thumbnails: {
+            default: {
+                url: string;
+                width: number;
+                height: number;
+            };
+        };
+        publishedAt: string;
+    };
+}
+
 interface Room {
     id: string;
     password?: string;
     clients: string[];
-    videoQueue: string[];
+    videoQueue: YouTubeVideo[];
     volume: number;
+    playingNow: YouTubeVideo | null;
 }
 
 type ClientMessage =
@@ -21,17 +40,19 @@ type ClientMessage =
     | { type: 'joinRoom'; roomId: string; password?: string }
     | { type: 'leaveRoom' }
     | { type: 'sendMessage'; message: string }
-    | { type: 'addVideo'; url: string }
+    | { type: 'addVideo'; video: YouTubeVideo }
     | { type: 'nextVideo' }
-    | { type: 'setVolume'; volume: number };
+    | { type: 'setVolume'; volume: number }
+    | { type: 'replay' };
 
 type ServerMessage =
     | { type: 'roomCreated'; roomId: string }
     | { type: 'joinedRoom'; roomId: string }
     | { type: 'leftRoom' }
     | { type: 'message'; sender: string; content: string }
-    | { type: 'videoAdded'; url: string }
-    | { type: 'videoChanged'; url: string }
+    | { type: 'videoAdded'; video: YouTubeVideo }
+    | { type: 'videoChanged'; video: YouTubeVideo | null }
+    | { type: 'videoQueueSync'; queue: YouTubeVideo[] }
     | { type: 'volumeChanged'; volume: number }
     | { type: 'error'; message: string };
 
@@ -89,13 +110,16 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
             await sendMessage(ws, message.message);
             break;
         case 'addVideo':
-            await addVideo(ws, message.url);
+            await addVideo(ws, message.video);
             break;
         case 'nextVideo':
             await nextVideo(ws);
             break;
         case 'setVolume':
             await setVolume(ws, message.volume);
+            break;
+        case 'replay':
+            await replay(ws);
             break;
         default:
             sendError(ws, 'Invalid message type');
@@ -118,6 +142,7 @@ async function createRoom(ws: ElysiaWS, password?: string) {
         clients: [ws.id],
         videoQueue: [],
         volume: 100,
+        playingNow: null,
     };
 
     await redis.set(`room:${roomId}`, JSON.stringify(room));
@@ -145,18 +170,21 @@ async function joinRoomInternal(ws: ElysiaWS, roomId: string) {
     const roomData = await redis.get(`room:${roomId}`);
     if (!roomData) return;
     const room: Room = JSON.parse(roomData);
-    room.clients.push(ws.id);
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
+    if (!room.clients.includes(ws.id)) {
+        room.clients.push(ws.id);
+        await redis.set(`room:${roomId}`, JSON.stringify(room));
+    }
     await redis.hset(`client:${ws.id}`, 'roomId', roomId);
     sendToClient(ws, { type: 'joinedRoom', roomId });
-    broadcastToRoom(roomId, {
+    sendToClient(ws, {
         type: 'videoChanged',
-        url: room.videoQueue[0] || '',
+        video: room.playingNow,
     });
-    broadcastToRoom(roomId, {
+    sendToClient(ws, {
         type: 'volumeChanged',
         volume: room.volume,
     });
+    syncVideoQueue(roomId);
 }
 
 // Room leaving
@@ -184,7 +212,7 @@ async function leaveCurrentRoom(ws: ElysiaWS) {
                 });
             }
         }
-        await redis.del(`client:${ws.id}`);
+        await redis.hdel(`client:${ws.id}`, 'roomId');
     }
 }
 
@@ -196,15 +224,20 @@ async function sendMessage(ws: ElysiaWS, content: string) {
 }
 
 // Video management
-async function addVideo(ws: ElysiaWS, url: string) {
+async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
     const roomId = await findRoomIdByClient(ws);
     if (!roomId) return sendError(ws, 'Not in a room');
     const roomData = await redis.get(`room:${roomId}`);
     if (!roomData) return;
     const room: Room = JSON.parse(roomData);
-    room.videoQueue.push(url);
+    room.videoQueue.push(video);
+    if (!room.playingNow) {
+        room.playingNow = video;
+        broadcastToRoom(roomId, { type: 'videoChanged', video });
+    }
     await redis.set(`room:${roomId}`, JSON.stringify(room));
-    broadcastToRoom(roomId, { type: 'videoAdded', url });
+    broadcastToRoom(roomId, { type: 'videoAdded', video });
+    syncVideoQueue(roomId);
 }
 
 async function nextVideo(ws: ElysiaWS) {
@@ -214,9 +247,29 @@ async function nextVideo(ws: ElysiaWS) {
     if (!roomData) return;
     const room: Room = JSON.parse(roomData);
     if (room.videoQueue.length > 0) {
-        const nextUrl = room.videoQueue.shift()!;
+        const nextVideo = room.videoQueue.shift()!;
+        room.playingNow = nextVideo;
         await redis.set(`room:${roomId}`, JSON.stringify(room));
-        broadcastToRoom(roomId, { type: 'videoChanged', url: nextUrl });
+        broadcastToRoom(roomId, { type: 'videoChanged', video: nextVideo });
+        syncVideoQueue(roomId);
+    } else {
+        room.playingNow = null;
+        await redis.set(`room:${roomId}`, JSON.stringify(room));
+        broadcastToRoom(roomId, { type: 'videoChanged', video: null });
+    }
+}
+
+// Replay functionality
+async function replay(ws: ElysiaWS) {
+    const roomId = await findRoomIdByClient(ws);
+    if (!roomId) return sendError(ws, 'Not in a room');
+    const roomData = await redis.get(`room:${roomId}`);
+    if (!roomData) return;
+    const room: Room = JSON.parse(roomData);
+    if (room.playingNow) {
+        broadcastToRoom(roomId, { type: 'videoChanged', video: room.playingNow });
+    } else {
+        sendError(ws, 'No video is currently playing');
     }
 }
 
@@ -255,12 +308,18 @@ async function broadcastToRoom(roomId: string, message: ServerMessage) {
     const roomData = await redis.get(`room:${roomId}`);
     if (!roomData) return;
     const room: Room = JSON.parse(roomData);
-    for (const clientId of room.clients) {
+    const uniqueClients = new Set(room.clients);
+    for (const clientId of uniqueClients) {
         const ws = wsConnections.get(clientId);
         if (ws) {
             sendToClient(ws, message);
+        } else {
+            // Remove disconnected clients from the room
+            room.clients = room.clients.filter((id) => id !== clientId);
         }
     }
+    // Update the room with potentially removed clients
+    await redis.set(`room:${roomId}`, JSON.stringify(room));
 }
 
 function sendToClient(ws: ElysiaWS, message: ServerMessage) {
@@ -269,6 +328,13 @@ function sendToClient(ws: ElysiaWS, message: ServerMessage) {
 
 function sendError(ws: ElysiaWS, message: string) {
     sendToClient(ws, { type: 'error', message });
+}
+
+async function syncVideoQueue(roomId: string) {
+    const roomData = await redis.get(`room:${roomId}`);
+    if (!roomData) return;
+    const room: Room = JSON.parse(roomData);
+    broadcastToRoom(roomId, { type: 'videoQueueSync', queue: room.videoQueue });
 }
 
 export type ElysiaApp = typeof app;
