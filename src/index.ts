@@ -138,7 +138,12 @@ async function createRoom(ws: ElysiaWS, password?: string) {
 
     const room: Room = {
         id: roomId,
-        password,
+        password: password
+            ? await Bun.password.hash(password, {
+                  algorithm: 'bcrypt',
+                  cost: 4,
+              })
+            : undefined,
         clients: [ws.id],
         videoQueue: [],
         volume: 100,
@@ -158,9 +163,11 @@ async function joinRoom(ws: ElysiaWS, roomId: string, password?: string) {
         return;
     }
     const room: Room = JSON.parse(roomData);
-    if (room.password && room.password !== password) {
-        sendError(ws, 'Incorrect password');
-        return;
+    if (room.password) {
+        if (!password || !(await Bun.password.verify(password, room.password))) {
+            sendError(ws, 'Incorrect password');
+            return;
+        }
     }
     await joinRoomInternal(ws, roomId);
 }
