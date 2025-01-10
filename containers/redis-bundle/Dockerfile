@@ -48,4 +48,4 @@ USER nobody
 
 ENTRYPOINT ["./entrypoint.sh"]
 
-EXPOSE 3000
+EXPOSE 8000
