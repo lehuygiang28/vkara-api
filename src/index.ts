@@ -56,6 +56,8 @@ type ServerMessage =
     | { type: 'volumeChanged'; volume: number }
     | { type: 'error'; message: string };
 
+const port = process.env.PORT || 8000;
+
 // Redis client setup
 const redis = new Redis({
     host: process.env.REDIS_HOST || 'localhost',
@@ -90,9 +92,9 @@ const app = new Elysia({
         },
         message: (ws, message: ClientMessage) => handleMessage(ws, message),
     })
-    .listen(3000);
+    .listen(port);
 
-console.log('WebSocket server is running on ws://localhost:3000/ws');
+console.log(`WebSocket server is running on http://localhost:${port}/ws`);
 
 // Message handler
 async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
