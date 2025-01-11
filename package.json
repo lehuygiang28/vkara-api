@@ -7,8 +7,10 @@
     },
     "dependencies": {
         "bullmq": "^5.34.8",
+        "chalk": "^5.4.1",
         "elysia": "^1.2.10",
-        "ioredis": "^5.4.2"
+        "ioredis": "^5.4.2",
+        "winston": "^3.17.0"
     },
     "devDependencies": {
         "bun-types": "^1.1.43"
