@@ -93,4 +93,5 @@ export const wsLogger = createContextLogger('WebSocket');
 export const cleanupLogger = createContextLogger('Cleanup');
 export const redisLogger = createContextLogger('Redis');
 
+export { logger };
 export default logger;

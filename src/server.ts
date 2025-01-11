@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia';
 import { ElysiaWS } from 'elysia/dist/ws';
 import { Redis } from 'ioredis';
 import { scheduleCleanupJobs, closeRoom } from './queues/cleanup';
-import { wsLogger, roomLogger, redisLogger } from './utils/logger';
+import { wsLogger, roomLogger, redisLogger, logger } from './utils/logger';
 import type { ClientMessage, ServerMessage, Room, ClientInfo, YouTubeVideo } from './types';
 
 const port = process.env.PORT || 8000;
@@ -83,7 +83,7 @@ const app = new Elysia({
     })
     .listen(port);
 
-console.log(`WebSocket server is running on http://localhost:${port}/ws`);
+logger.info(`WebSocket server is running on http://localhost:${port}/ws`);
 
 // Message handler
 async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
