@@ -117,8 +117,7 @@ export async function scheduleCleanupJobs() {
             {},
             {
                 repeat: {
-                    // pattern: '*/5 * * * *', // Every 5 minutes
-                    pattern: '* * * * *', // Every 5 minutes
+                    pattern: '*/5 * * * *', // Every 5 minutes
                 },
             },
         );
