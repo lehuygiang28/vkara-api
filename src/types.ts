@@ -36,6 +36,7 @@ export interface Room {
 }
 
 export type ClientMessage =
+    | { type: 'ping' }
     | { type: 'createRoom'; password?: string }
     | { type: 'joinRoom'; roomId: string; password?: string }
     | { type: 'leaveRoom' }
@@ -53,6 +54,7 @@ export type ClientMessage =
     | { type: 'syncRequest' };
 
 export type ServerMessage =
+    | { type: 'pong' }
     | { type: 'roomCreated'; roomId: string }
     | { type: 'roomUpdate'; room: Room }
     | { type: 'leftRoom' }

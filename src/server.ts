@@ -33,6 +33,7 @@ const app = new Elysia({
         open: async (ws) => {
             wsLogger.info(`Client connected`, { clientId: ws.id });
             wsConnections.set(ws.id, ws);
+            sendToClient(ws, { type: 'pong' });
         },
         close: async (ws) => {
             wsLogger.info(`Client disconnected`, { clientId: ws.id });
@@ -48,6 +49,9 @@ logger.info(`WebSocket server is running on http://localhost:${port}/ws`);
 // Message handler
 async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
     switch (message.type) {
+        case 'ping':
+            sendToClient(ws, { type: 'pong' });
+            break;
         case 'createRoom':
             await createRoom(ws, message.password);
             break;
@@ -147,19 +151,18 @@ async function joinRoom(ws: ElysiaWS, roomId: string, password?: string) {
         sendError(ws, 'Room not found');
         return;
     }
+
     const room: Room = JSON.parse(roomData);
-    if (room.password) {
-        if (!password || !(await Bun.password.verify(password, room.password))) {
-            sendError(ws, 'Incorrect password');
-            return;
-        }
+    if (room.password && (!password || !(await Bun.password.verify(password, room.password)))) {
+        sendError(ws, 'Incorrect password');
+        return;
     }
-    await joinRoomInternal(ws, roomId);
-    await updateRoomActivity(roomId);
+
+    await Promise.all([joinRoomInternal(ws, roomId), updateRoomActivity(roomId)]);
 }
 
 async function joinRoomInternal(ws: ElysiaWS, roomId: string) {
-    // Leave others rooms first if in any
+    // Leave other rooms first if in any
     await leaveCurrentRoom(ws);
 
     const roomData = await redis.get(`room:${roomId}`);
@@ -174,8 +177,10 @@ async function joinRoomInternal(ws: ElysiaWS, roomId: string) {
         ws.subscribe(`room:${roomId}`);
     }
 
-    await redis.hset(`client:${ws.id}`, 'roomId', roomId);
-    sendRoomUpdate(roomId);
+    await Promise.all([
+        redis.hset(`client:${ws.id}`, 'roomId', roomId),
+        sendRoomUpdate(ws, roomId),
+    ]);
 }
 
 // Room leaving
@@ -227,7 +232,6 @@ async function leaveCurrentRoom(ws: ElysiaWS) {
             const room: Room = JSON.parse(roomData);
             room.clients = room.clients.filter((id) => id !== ws.id);
             await redis.set(`room:${clientInfo.roomId}`, JSON.stringify(room));
-            sendRoomUpdate(clientInfo.roomId);
         }
         await redis.hdel(`client:${ws.id}`, 'roomId');
     }
@@ -272,7 +276,7 @@ async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
 
     try {
         await redis.set(`room:${roomId}`, JSON.stringify(room));
-        sendRoomUpdate(roomId);
+        broadcastRoomUpdate(roomId);
         roomLogger.info(`Video added successfully`, {
             roomId,
             videoId: video.id.videoId,
@@ -308,7 +312,7 @@ async function playNow(ws: ElysiaWS, video: YouTubeVideo) {
     room.videoQueue = room.videoQueue.filter((v) => v.id.videoId !== video.id.videoId);
 
     await redis.set(`room:${roomId}`, JSON.stringify(room));
-    sendRoomUpdate(roomId);
+    broadcastRoomUpdate(roomId);
 }
 
 async function nextVideo(ws: ElysiaWS) {
@@ -326,13 +330,13 @@ async function nextVideo(ws: ElysiaWS) {
         room.isPlaying = true;
         room.currentTime = 0;
         await redis.set(`room:${roomId}`, JSON.stringify(room));
-        sendRoomUpdate(roomId);
+        broadcastRoomUpdate(roomId);
     } else {
         room.playingNow = null;
         room.isPlaying = false;
         room.currentTime = 0;
         await redis.set(`room:${roomId}`, JSON.stringify(room));
-        sendRoomUpdate(roomId);
+        broadcastRoomUpdate(roomId);
     }
 }
 
@@ -347,7 +351,7 @@ async function replay(ws: ElysiaWS) {
         room.currentTime = 0;
         room.isPlaying = true;
         await redis.set(`room:${roomId}`, JSON.stringify(room));
-        sendRoomUpdate(roomId);
+        broadcastRoomUpdate(roomId);
     } else {
         sendError(ws, 'No video is currently playing');
     }
@@ -362,7 +366,7 @@ async function setVolume(ws: ElysiaWS, volume: number) {
     const room: Room = JSON.parse(roomData);
     room.volume = volume;
     await redis.set(`room:${roomId}`, JSON.stringify(room));
-    sendRoomUpdate(roomId);
+    broadcastRoomUpdate(roomId);
 }
 
 // Play functionality
@@ -374,7 +378,7 @@ async function play(ws: ElysiaWS) {
     const room: Room = JSON.parse(roomData);
     room.isPlaying = true;
     await redis.set(`room:${roomId}`, JSON.stringify(room));
-    sendRoomUpdate(roomId);
+    broadcastRoomUpdate(roomId);
 }
 
 // Pause functionality
@@ -386,7 +390,7 @@ async function pause(ws: ElysiaWS) {
     const room: Room = JSON.parse(roomData);
     room.isPlaying = false;
     await redis.set(`room:${roomId}`, JSON.stringify(room));
-    sendRoomUpdate(roomId);
+    broadcastRoomUpdate(roomId);
 }
 
 // Seek functionality
@@ -398,7 +402,7 @@ async function seek(ws: ElysiaWS, time: number) {
     const room: Room = JSON.parse(roomData);
     room.currentTime = time;
     await redis.set(`room:${roomId}`, JSON.stringify(room));
-    sendRoomUpdate(roomId);
+    broadcastRoomUpdate(roomId);
 }
 
 async function videoFinished(ws: ElysiaWS) {
@@ -420,7 +424,7 @@ async function videoFinished(ws: ElysiaWS) {
 async function syncRequest(ws: ElysiaWS) {
     const roomId = await findRoomIdByClient(ws);
     if (!roomId) return sendError(ws, 'Not in a room');
-    sendRoomUpdate(roomId);
+    broadcastRoomUpdate(roomId);
 }
 
 async function getClientInfo(wsId: string): Promise<ClientInfo | null> {
@@ -467,11 +471,18 @@ function sendError(ws: ElysiaWS, message: string) {
     sendToClient(ws, { type: 'error', message });
 }
 
-async function sendRoomUpdate(roomId: string) {
+async function broadcastRoomUpdate(roomId: string) {
     const roomData = await redis.get(`room:${roomId}`);
     if (!roomData) return;
     const room: Room = JSON.parse(roomData);
     broadcastToRoom(roomId, { type: 'roomUpdate', room });
+}
+
+async function sendRoomUpdate(ws: ElysiaWS, roomId: string) {
+    const roomData = await redis.get(`room:${roomId}`);
+    if (!roomData) return;
+    const room: Room = JSON.parse(roomData);
+    sendToClient(ws, { type: 'roomUpdate', room });
 }
 
 async function updateRoomActivity(roomId: string) {
