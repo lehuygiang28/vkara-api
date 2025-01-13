@@ -359,6 +359,8 @@ async function replay(ws: ElysiaWS) {
 
 // Volume control
 async function setVolume(ws: ElysiaWS, volume: number) {
+    volume = Math.min(100, Math.max(0, volume));
+
     const roomId = await findRoomIdByClient(ws);
     if (!roomId) return sendError(ws, 'Not in a room');
     const roomData = await redis.get(`room:${roomId}`);
@@ -366,7 +368,8 @@ async function setVolume(ws: ElysiaWS, volume: number) {
     const room: Room = JSON.parse(roomData);
     room.volume = volume;
     await redis.set(`room:${roomId}`, JSON.stringify(room));
-    broadcastRoomUpdate(roomId);
+
+    broadcastToRoom(roomId, { type: 'volumeChanged', volume });
 }
 
 // Play functionality
@@ -378,7 +381,8 @@ async function play(ws: ElysiaWS) {
     const room: Room = JSON.parse(roomData);
     room.isPlaying = true;
     await redis.set(`room:${roomId}`, JSON.stringify(room));
-    broadcastRoomUpdate(roomId);
+
+    broadcastToRoom(roomId, { type: 'play' });
 }
 
 // Pause functionality
@@ -390,7 +394,8 @@ async function pause(ws: ElysiaWS) {
     const room: Room = JSON.parse(roomData);
     room.isPlaying = false;
     await redis.set(`room:${roomId}`, JSON.stringify(room));
-    broadcastRoomUpdate(roomId);
+
+    broadcastToRoom(roomId, { type: 'pause' });
 }
 
 // Seek functionality
@@ -402,7 +407,8 @@ async function seek(ws: ElysiaWS, time: number) {
     const room: Room = JSON.parse(roomData);
     room.currentTime = time;
     await redis.set(`room:${roomId}`, JSON.stringify(room));
-    broadcastRoomUpdate(roomId);
+
+    broadcastToRoom(roomId, { type: 'currentTimeChanged', currentTime: time });
 }
 
 async function videoFinished(ws: ElysiaWS) {

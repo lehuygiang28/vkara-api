@@ -60,4 +60,9 @@ export type ServerMessage =
     | { type: 'leftRoom' }
     | { type: 'message'; sender: string; content: string }
     | { type: 'error'; message: string }
-    | { type: 'roomClosed'; reason: string };
+    | { type: 'roomClosed'; reason: string }
+    | { type: 'replay' }
+    | { type: 'play' }
+    | { type: 'pause' }
+    | { type: 'volumeChanged'; volume: number }
+    | { type: 'currentTimeChanged'; currentTime: number };
