@@ -1,10 +1,9 @@
-import { Queue, Worker } from 'bullmq';
 import { Redis } from 'ioredis';
-import { ElysiaWS } from 'elysia/dist/ws';
+import { Queue, Worker } from 'bullmq';
 import type { Room } from '../types';
 import { cleanupLogger } from '../utils/logger';
 
-const INACTIVE_TIMEOUT = parseInt(process.env.INACTIVE_TIMEOUT || '300') * 1000; // 5 minutes
+const INACTIVE_TIMEOUT = parseInt(process.env.INACTIVE_TIMEOUT || '300') * 1000; // default 5 minutes
 
 // Create a new Redis connection for BullMQ
 const connection = new Redis({
@@ -127,50 +126,5 @@ export async function scheduleCleanupJobs() {
     } catch (error) {
         cleanupLogger.error('Failed to schedule cleanup jobs', { error });
         throw error;
-    }
-}
-
-// Function to manually close a room
-export async function closeRoom(roomId: string) {
-    try {
-        const roomData = await connection.get(`room:${roomId}`);
-        if (!roomData) {
-            cleanupLogger.warn(`Attempted to close non-existent room`, { roomId });
-            return false;
-        }
-
-        const room: Room = JSON.parse(roomData);
-
-        cleanupLogger.info(`Closing room by request`, {
-            roomId: room.id,
-            clientCount: room.clients.length,
-        });
-
-        // Get client IDs for cleanup
-        const clientIds = room.clients;
-
-        // Notify about room closure through pub/sub
-        await connection.publish(
-            'room-notifications',
-            JSON.stringify({
-                type: 'room-closed',
-                roomId: room.id,
-                clientIds,
-                reason: 'Room has been closed by the creator',
-            }),
-        );
-
-        // Clean up client mappings
-        for (const clientId of clientIds) {
-            await connection.hdel(`client:${clientId}`, 'roomId');
-        }
-
-        // Delete the room
-        await connection.del(`room:${roomId}`);
-        cleanupLogger.info(`Room closed successfully`, { roomId });
-        return true;
-    } catch (error) {
-        cleanupLogger.error(`Failed to close room`, { roomId, error });
-        return false;
     }
 }

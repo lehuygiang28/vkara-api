@@ -1,5 +1,3 @@
-import { ElysiaWS } from 'elysia/dist/ws';
-
 export interface ClientInfo {
     id: string;
     roomId?: string;
@@ -28,10 +26,13 @@ export interface Room {
     password?: string;
     clients: string[];
     videoQueue: YouTubeVideo[];
+    historyQueue: YouTubeVideo[];
     volume: number;
     playingNow: YouTubeVideo | null;
     lastActivity: number;
     creatorId: string;
+    isPlaying: boolean;
+    currentTime: number;
 }
 
 export type ClientMessage =
@@ -41,18 +42,20 @@ export type ClientMessage =
     | { type: 'closeRoom' }
     | { type: 'sendMessage'; message: string }
     | { type: 'addVideo'; video: YouTubeVideo }
+    | { type: 'playNow'; video: YouTubeVideo }
     | { type: 'nextVideo' }
     | { type: 'setVolume'; volume: number }
-    | { type: 'replay' };
+    | { type: 'replay' }
+    | { type: 'play' }
+    | { type: 'pause' }
+    | { type: 'seek'; time: number }
+    | { type: 'videoFinished' }
+    | { type: 'syncRequest' };
 
 export type ServerMessage =
     | { type: 'roomCreated'; roomId: string }
-    | { type: 'joinedRoom'; roomId: string }
+    | { type: 'roomUpdate'; room: Room }
     | { type: 'leftRoom' }
     | { type: 'message'; sender: string; content: string }
-    | { type: 'videoAdded'; video: YouTubeVideo }
-    | { type: 'videoChanged'; video: YouTubeVideo | null }
-    | { type: 'videoQueueSync'; queue: YouTubeVideo[] }
-    | { type: 'volumeChanged'; volume: number }
     | { type: 'error'; message: string }
     | { type: 'roomClosed'; reason: string };
