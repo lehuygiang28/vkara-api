@@ -66,6 +66,7 @@ jobs:
 
             - name: Create .env file
               run: |
+                  touch ./containers/redis-bundle/.env
                   touch .env
                   cat .env
 
