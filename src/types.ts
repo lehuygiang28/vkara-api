@@ -50,13 +50,13 @@ export type ClientMessage =
     | { type: 'play' }
     | { type: 'pause' }
     | { type: 'seek'; time: number }
-    | { type: 'videoFinished' }
-    | { type: 'syncRequest' };
+    | { type: 'videoFinished' };
 
 export type ServerMessage =
     | { type: 'pong' }
     | { type: 'roomCreated'; roomId: string }
     | { type: 'roomUpdate'; room: Room }
+    | { type: 'roomNotFound' }
     | { type: 'leftRoom' }
     | { type: 'message'; sender: string; content: string }
     | { type: 'error'; message: string }

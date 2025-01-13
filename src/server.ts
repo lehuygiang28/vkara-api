@@ -94,9 +94,6 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
         case 'videoFinished':
             await videoFinished(ws);
             break;
-        case 'syncRequest':
-            await syncRequest(ws);
-            break;
         default:
             sendError(ws, 'Invalid message type');
     }
@@ -149,6 +146,7 @@ async function joinRoom(ws: ElysiaWS, roomId: string, password?: string) {
     const roomData = await redis.get(`room:${roomId}`);
     if (!roomData) {
         sendError(ws, 'Room not found');
+        sendToClient(ws, { type: 'roomNotFound' });
         return;
     }
 
@@ -351,7 +349,8 @@ async function replay(ws: ElysiaWS) {
         room.currentTime = 0;
         room.isPlaying = true;
         await redis.set(`room:${roomId}`, JSON.stringify(room));
-        broadcastRoomUpdate(roomId);
+
+        broadcastToRoom(roomId, { type: 'replay' });
     } else {
         sendError(ws, 'No video is currently playing');
     }
@@ -425,12 +424,6 @@ async function videoFinished(ws: ElysiaWS) {
         await redis.set(`room:${roomId}`, JSON.stringify(room));
     }
     await nextVideo(ws);
-}
-
-async function syncRequest(ws: ElysiaWS) {
-    const roomId = await findRoomIdByClient(ws);
-    if (!roomId) return sendError(ws, 'Not in a room');
-    broadcastRoomUpdate(roomId);
 }
 
 async function getClientInfo(wsId: string): Promise<ClientInfo | null> {
