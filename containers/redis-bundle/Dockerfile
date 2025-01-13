@@ -34,14 +34,15 @@ RUN apk update && \
 COPY --chown=nobody:nobody ./containers/redis-bundle/supervisord.conf ./supervisord.conf
 COPY --chown=nobody:nobody ./containers/redis-bundle/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
-RUN chown nobody:nobody /app/supervisord.conf && \
-    chmod 755 /app/supervisord.conf && \ 
-    touch /app/supervisord.log && \
-    chown nobody:nobody /app/supervisord.log
 
-# Create log directory
+RUN touch /app/supervisord.log && \
+    chown nobody:nobody /app/supervisord.log && \
+    chmod 755 /app/supervisord.conf && \ 
+    chmod 644 /app/supervisord.log
+
 RUN mkdir -p ./log && \
     chown nobody:nobody ./log
+
 RUN chown nobody:nobody /app
 
 ENV NODE_ENV=production
