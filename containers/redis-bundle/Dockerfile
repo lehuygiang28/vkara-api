@@ -24,9 +24,11 @@ FROM build AS production
 
 WORKDIR /app
 
-COPY --from=build /app/server server
-RUN chmod +x server && \
-    chown nobody:nobody server
+RUN mkdir -p /app && \
+    chown nobody:nobody /app
+COPY --chown=nobody:nobody --from=build /app/server server
+RUN chmod +x /app/server && \
+    chown nobody:nobody /app/server
 
 RUN apk update && \
     apk add --no-cache supervisor redis
