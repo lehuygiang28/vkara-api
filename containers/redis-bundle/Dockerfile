@@ -35,7 +35,9 @@ COPY --chown=nobody:nobody ./containers/redis-bundle/supervisord.conf ./supervis
 COPY --chown=nobody:nobody ./containers/redis-bundle/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 RUN chown nobody:nobody /app/supervisord.conf && \
-    chmod 755 /app/supervisord.conf
+    chmod 755 /app/supervisord.conf && \ 
+    touch /app/supervisord.log && \
+    chown nobody:nobody /app/supervisord.log
 
 # Create log directory
 RUN mkdir -p ./log && \
