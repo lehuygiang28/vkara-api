@@ -199,8 +199,10 @@ async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
         room.currentTime = 0;
     }
 
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
-    await broadcastRoomUpdate(roomId);
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'roomUpdate', room }),
+    ]);
 }
 
 async function playVideoNow(ws: ElysiaWS, video: YouTubeVideo) {
@@ -218,8 +220,10 @@ async function playVideoNow(ws: ElysiaWS, video: YouTubeVideo) {
     room.lastActivity = Date.now();
     room.videoQueue = room.videoQueue.filter((v) => v.id !== video.id);
 
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
-    await broadcastRoomUpdate(roomId);
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'roomUpdate', room }),
+    ]);
 }
 
 async function nextVideo(ws: ElysiaWS) {
@@ -241,8 +245,11 @@ async function nextVideo(ws: ElysiaWS) {
     }
 
     room.lastActivity = Date.now();
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
-    await broadcastRoomUpdate(roomId);
+
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'roomUpdate', room }),
+    ]);
 }
 
 // Playback operations
@@ -253,8 +260,10 @@ async function setVolume(ws: ElysiaWS, volume: number) {
     room.volume = Math.min(100, Math.max(0, volume));
     room.lastActivity = Date.now();
 
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
-    await broadcastToRoom(roomId, { type: 'volumeChanged', volume: room.volume });
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'volumeChanged', volume: room.volume }),
+    ]);
 }
 
 async function play(ws: ElysiaWS) {
@@ -264,8 +273,10 @@ async function play(ws: ElysiaWS) {
     room.isPlaying = true;
     room.lastActivity = Date.now();
 
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
-    await broadcastToRoom(roomId, { type: 'play' });
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'play' }),
+    ]);
 }
 
 async function pause(ws: ElysiaWS) {
@@ -275,8 +286,10 @@ async function pause(ws: ElysiaWS) {
     room.isPlaying = false;
     room.lastActivity = Date.now();
 
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
-    await broadcastToRoom(roomId, { type: 'pause' });
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'pause' }),
+    ]);
 }
 
 async function seek(ws: ElysiaWS, time: number) {
@@ -286,8 +299,10 @@ async function seek(ws: ElysiaWS, time: number) {
     room.currentTime = time;
     room.lastActivity = Date.now();
 
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
-    await broadcastToRoom(roomId, { type: 'currentTimeChanged', currentTime: time });
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'currentTimeChanged', currentTime: time }),
+    ]);
 }
 
 async function replay(ws: ElysiaWS) {
@@ -302,8 +317,10 @@ async function replay(ws: ElysiaWS) {
     room.isPlaying = true;
     room.lastActivity = Date.now();
 
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
-    await broadcastToRoom(roomId, { type: 'replay' });
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'replay' }),
+    ]);
 }
 
 async function moveVideoToTop(ws: ElysiaWS, videoId: string) {
@@ -319,8 +336,10 @@ async function moveVideoToTop(ws: ElysiaWS, videoId: string) {
     room.videoQueue.unshift(videoForMove);
     room.lastActivity = Date.now();
 
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
-    await broadcastToRoom(roomId, { type: 'roomUpdate', room });
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'roomUpdate', room }),
+    ]);
 }
 
 async function shuffleQueue(ws: ElysiaWS) {
@@ -330,8 +349,10 @@ async function shuffleQueue(ws: ElysiaWS) {
     room.videoQueue = shuffleArray(room.videoQueue);
     room.lastActivity = Date.now();
 
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
-    await broadcastToRoom(roomId, { type: 'roomUpdate', room });
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'roomUpdate', room }),
+    ]);
 }
 
 async function clearQueue(ws: ElysiaWS) {
@@ -341,8 +362,10 @@ async function clearQueue(ws: ElysiaWS) {
     room.videoQueue = [];
     room.lastActivity = Date.now();
 
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
-    await broadcastToRoom(roomId, { type: 'roomUpdate', room });
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'roomUpdate', room }),
+    ]);
 }
 
 async function clearHistory(ws: ElysiaWS) {
@@ -352,8 +375,10 @@ async function clearHistory(ws: ElysiaWS) {
     room.historyQueue = [];
     room.lastActivity = Date.now();
 
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
-    await broadcastToRoom(roomId, { type: 'roomUpdate', room });
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'roomUpdate', room }),
+    ]);
 }
 
 async function removeVideoFromQueue(ws: ElysiaWS, videoId: string) {
@@ -363,8 +388,10 @@ async function removeVideoFromQueue(ws: ElysiaWS, videoId: string) {
     room.videoQueue = room.videoQueue.filter((v) => v.id !== videoId);
     room.lastActivity = Date.now();
 
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
-    await broadcastToRoom(roomId, { type: 'roomUpdate', room });
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'roomUpdate', room }),
+    ]);
 }
 
 // Broadcasting utilities
@@ -391,11 +418,6 @@ async function broadcastToRoom(roomId: string, message: ServerMessage) {
         room.clients = room.clients.filter((id) => !disconnectedClients.includes(id));
         await redis.set(`room:${roomId}`, JSON.stringify(room));
     }
-}
-
-async function broadcastRoomUpdate(roomId: string) {
-    const room = await validateRoom(roomId);
-    await broadcastToRoom(roomId, { type: 'roomUpdate', room });
 }
 
 async function sendRoomUpdate(ws: ElysiaWS, roomId: string) {
