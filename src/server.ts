@@ -3,6 +3,7 @@ import { ElysiaWS } from 'elysia/dist/ws';
 import { Redis } from 'ioredis';
 import { scheduleCleanupJobs } from './queues/cleanup';
 import { wsLogger, roomLogger, logger } from './utils/logger';
+import { shuffleArray } from './utils/common';
 import type { ClientMessage, ServerMessage, Room, ClientInfo, YouTubeVideo } from './types';
 import { ErrorCode, RoomError } from './errors';
 
@@ -322,6 +323,28 @@ async function moveVideoToTop(ws: ElysiaWS, videoId: string) {
     broadcastToRoom(roomId, { type: 'roomUpdate', room });
 }
 
+async function shuffleQueue(ws: ElysiaWS) {
+    const roomId = await validateClientInRoom(ws);
+    const room = await validateRoom(roomId);
+
+    room.videoQueue = shuffleArray(room.videoQueue);
+    room.lastActivity = Date.now();
+
+    await redis.set(`room:${roomId}`, JSON.stringify(room));
+    broadcastToRoom(roomId, { type: 'roomUpdate', room });
+}
+
+async function clearQueue(ws: ElysiaWS) {
+    const roomId = await validateClientInRoom(ws);
+    const room = await validateRoom(roomId);
+
+    room.videoQueue = [];
+    room.lastActivity = Date.now();
+
+    await redis.set(`room:${roomId}`, JSON.stringify(room));
+    broadcastToRoom(roomId, { type: 'roomUpdate', room });
+}
+
 // Broadcasting utilities
 async function broadcastToRoom(roomId: string, message: ServerMessage) {
     const room = await validateRoom(roomId);
@@ -439,6 +462,14 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
 
             case 'moveToTop':
                 await moveVideoToTop(ws, message.videoId);
+                break;
+
+            case 'shuffleQueue':
+                await shuffleQueue(ws);
+                break;
+
+            case 'clearQueue':
+                await clearQueue(ws);
                 break;
 
             default:

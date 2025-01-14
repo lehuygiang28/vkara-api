@@ -47,6 +47,8 @@ export type ClientMessage = MessageBase &
         | { type: 'seek'; time: number }
         | { type: 'videoFinished' }
         | { type: 'moveToTop'; videoId: string }
+        | { type: 'shuffleQueue' }
+        | { type: 'clearQueue' }
     );
 
 export type ServerMessage =
