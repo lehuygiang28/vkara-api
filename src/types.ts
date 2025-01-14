@@ -56,9 +56,20 @@ export type ServerMessage =
     | { type: 'leftRoom' }
     | { type: 'message'; sender: string; content: string }
     | { type: 'error'; message: string }
+    | { type: 'errorWithCode'; code: ErrorCode; message?: string }
     | { type: 'roomClosed'; reason: string }
     | { type: 'replay' }
     | { type: 'play' }
     | { type: 'pause' }
     | { type: 'volumeChanged'; volume: number }
     | { type: 'currentTimeChanged'; currentTime: number };
+
+export type ErrorCode =
+    | 'internalError'
+    | 'invalidMessage'
+    | 'roomNotFound'
+    | 'notInRoom'
+    | 'incorrectPassword'
+    | 'roomClosed'
+    | 'notCreatorOfRoom'
+    | 'alreadyInQueue';

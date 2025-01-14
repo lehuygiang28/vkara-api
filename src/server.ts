@@ -4,8 +4,7 @@ import { Redis } from 'ioredis';
 import { scheduleCleanupJobs } from './queues/cleanup';
 import { wsLogger, roomLogger, logger } from './utils/logger';
 import type { ClientMessage, ServerMessage, Room, ClientInfo, YouTubeVideo } from './types';
-
-const port = process.env.PORT || 8000;
+import { ErrorCode, RoomError } from './errors';
 
 const redis = new Redis({
     host: process.env.REDIS_HOST || 'localhost',
@@ -13,101 +12,65 @@ const redis = new Redis({
     password: process.env.REDIS_PASSWORD,
 });
 
-// WebSocket connections map
 export const wsConnections = new Map<string, ElysiaWS>();
 
-// Elysia app setup
-const app = new Elysia({
-    websocket: {
-        idleTimeout: 960,
-    },
-})
-    .state('wsConnections', wsConnections)
-    .ws('/ws', {
-        schema: {
-            body: t.Object({
-                type: t.String(),
-                payload: t.Any(),
-            }),
-        },
-        open: async (ws) => {
-            wsLogger.info(`Client connected`, { clientId: ws.id });
-            wsConnections.set(ws.id, ws);
-            sendToClient(ws, { type: 'pong' });
-        },
-        close: async (ws) => {
-            wsLogger.info(`Client disconnected`, { clientId: ws.id });
-            await leaveRoom(ws);
-            wsConnections.delete(ws.id);
-        },
-        message: (ws, message: ClientMessage) => handleMessage(ws, message),
-    })
-    .listen(port);
+// Core utilities
+export function sendToClient(ws: ElysiaWS, message: ServerMessage) {
+    ws.send(JSON.stringify(message));
+}
 
-logger.info(`WebSocket server is running on http://localhost:${port}/ws`);
-
-// Message handler
-async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
-    if (String(message?.requiresAck) === 'true' && message.id) {
-        sendToClient(ws, { type: 'ack', messageId: message.id });
-    }
-
-    try {
-        switch (message.type) {
-            case 'ping':
-                sendToClient(ws, { type: 'pong' });
-                break;
-            case 'createRoom':
-                await createRoom(ws, message.password);
-                break;
-            case 'joinRoom':
-                await joinRoom(ws, message.roomId, message.password);
-                break;
-            case 'leaveRoom':
-                await leaveRoom(ws);
-                break;
-            case 'closeRoom':
-                await handleCloseRoom(ws);
-                break;
-            case 'sendMessage':
-                await sendMessage(ws, message.message);
-                break;
-            case 'addVideo':
-                await addVideo(ws, message.video);
-                break;
-            case 'playNow':
-                await playVideoNow(ws, message.video);
-                break;
-            case 'nextVideo':
-                await nextVideo(ws);
-                break;
-            case 'setVolume':
-                await setVolume(ws, message.volume);
-                break;
-            case 'replay':
-                await replay(ws);
-                break;
-            case 'play':
-                await play(ws);
-                break;
-            case 'pause':
-                await pause(ws);
-                break;
-            case 'seek':
-                await seek(ws, message.time);
-                break;
-            case 'videoFinished':
-                await handleVideoFinished(ws);
-                break;
-            default:
-                sendError(ws, 'Invalid message type');
-        }
-    } catch (error) {
-        sendError(ws, 'Error handling message');
+function handleError(ws: ElysiaWS, error: Error | RoomError) {
+    if (error instanceof RoomError) {
+        sendToClient(ws, {
+            type: 'errorWithCode',
+            code: error.code,
+            message: error.message,
+        });
+    } else {
+        sendToClient(ws, {
+            type: 'error',
+            message: 'An unexpected error occurred',
+        });
+        logger.error('Unexpected error', { error });
     }
 }
 
-// Room creation
+// Room utilities
+async function validateRoom(roomId: string): Promise<Room> {
+    const roomData = await redis.get(`room:${roomId}`);
+    if (!roomData) {
+        throw new RoomError(ErrorCode.ROOM_NOT_FOUND);
+    }
+    return JSON.parse(roomData);
+}
+
+async function validateClientInRoom(ws: ElysiaWS): Promise<string> {
+    const roomId = await findRoomIdByClient(ws);
+    if (!roomId) {
+        throw new RoomError(ErrorCode.NOT_IN_ROOM);
+    }
+    return roomId;
+}
+
+async function getClientInfo(wsId: string): Promise<ClientInfo | null> {
+    const clientInfo = await redis.hgetall(`client:${wsId}`);
+    return clientInfo.roomId ? { id: wsId, roomId: clientInfo.roomId } : null;
+}
+
+async function findRoomIdByClient(ws: ElysiaWS): Promise<string | undefined> {
+    const clientInfo = await getClientInfo(ws.id);
+    return clientInfo?.roomId;
+}
+
+function generateRoomId(): string {
+    return Math.floor(10000000 + Math.random() * 90000000).toString();
+}
+
+async function roomIdExists(roomId: string): Promise<boolean> {
+    return Boolean(await redis.exists(`room:${roomId}`));
+}
+
+// Room operations
 async function createRoom(ws: ElysiaWS, password?: string) {
     let roomId: string;
     let roomExists: boolean;
@@ -138,45 +101,27 @@ async function createRoom(ws: ElysiaWS, password?: string) {
         currentTime: 0,
     };
 
-    try {
-        await redis.set(`room:${roomId}`, JSON.stringify(room));
-        await joinRoomInternal(ws, roomId);
-        sendToClient(ws, { type: 'roomCreated', roomId });
-        roomLogger.info(`Room ${roomId} created successfully`, { roomId, creatorId: ws.id });
-    } catch (error) {
-        roomLogger.error(`Failed to create room`, { roomId, error });
-        sendError(ws, 'Failed to create room');
-    }
+    await redis.set(`room:${roomId}`, JSON.stringify(room));
+    await joinRoomInternal(ws, roomId);
+    sendToClient(ws, { type: 'roomCreated', roomId });
 }
 
-// Room joining
 async function joinRoom(ws: ElysiaWS, roomId: string, password?: string) {
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) {
-        sendError(ws, 'Room not found');
-        sendToClient(ws, { type: 'roomNotFound' });
-        return;
-    }
+    const room = await validateRoom(roomId);
 
-    const room: Room = JSON.parse(roomData);
     if (room.password && (!password || !(await Bun.password.verify(password, room.password)))) {
-        sendError(ws, 'Incorrect password');
-        return;
+        throw new RoomError(ErrorCode.INCORRECT_PASSWORD);
     }
 
-    await Promise.all([joinRoomInternal(ws, roomId), updateRoomActivity(roomId)]);
+    await joinRoomInternal(ws, roomId);
+    await updateRoomActivity(roomId);
 }
 
 async function joinRoomInternal(ws: ElysiaWS, roomId: string) {
-    // Leave other rooms first if in any
     await leaveCurrentRoom(ws);
 
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) {
-        return;
-    }
+    const room = await validateRoom(roomId);
 
-    const room: Room = JSON.parse(roomData);
     if (!room.clients.includes(ws.id)) {
         room.clients.push(ws.id);
         await redis.set(`room:${roomId}`, JSON.stringify(room));
@@ -189,129 +134,77 @@ async function joinRoomInternal(ws: ElysiaWS, roomId: string) {
     ]);
 }
 
-// Room leaving
 async function leaveRoom(ws: ElysiaWS) {
     await leaveCurrentRoom(ws);
     sendToClient(ws, { type: 'leftRoom' });
 }
 
-// Handle room closure by creator
-async function handleCloseRoom(ws: ElysiaWS) {
-    const roomId = await findRoomIdByClient(ws);
-    if (!roomId) {
-        wsLogger.warn(`Close room attempt failed - client not in a room`, { clientId: ws.id });
-        return sendError(ws, 'Not in a room');
-    }
-
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) {
-        roomLogger.warn(`Close room attempt failed - room not found`, { roomId });
-        return sendError(ws, 'Room not found');
-    }
-
-    const room: Room = JSON.parse(roomData);
-
-    if (room.creatorId !== ws.id) {
-        roomLogger.warn(`Unauthorized room closure attempt`, {
-            roomId,
-            attemptedBy: ws.id,
-            creatorId: room.creatorId,
-        });
-        return sendError(ws, 'Only the room creator can close the room');
-    }
-
-    roomLogger.info(`Initiating room closure`, { roomId, creatorId: ws.id });
-    const closed = await closeRoom(roomId);
-    if (!closed) {
-        roomLogger.error(`Failed to close room`, { roomId });
-        return sendError(ws, 'Failed to close room');
-    }
-}
-
-// Utility functions
 async function leaveCurrentRoom(ws: ElysiaWS) {
     const clientInfo = await getClientInfo(ws.id);
-    if (clientInfo && clientInfo.roomId) {
+    if (clientInfo?.roomId) {
         ws.unsubscribe(`room:${clientInfo.roomId}`);
-        const roomData = await redis.get(`room:${clientInfo.roomId}`);
-        if (roomData) {
-            const room: Room = JSON.parse(roomData);
-            room.clients = room.clients.filter((id) => id !== ws.id);
-            await redis.set(`room:${clientInfo.roomId}`, JSON.stringify(room));
-        }
+        const room = await validateRoom(clientInfo.roomId);
+        room.clients = room.clients.filter((id) => id !== ws.id);
+        await redis.set(`room:${clientInfo.roomId}`, JSON.stringify(room));
         await redis.hdel(`client:${ws.id}`, 'roomId');
     }
 }
 
-// Message sending
-async function sendMessage(ws: ElysiaWS, content: string) {
-    const roomId = await findRoomIdByClient(ws);
-    if (!roomId) return sendError(ws, 'Not in a room');
-    broadcastToRoom(roomId, { type: 'message', sender: ws.id, content });
+async function handleCloseRoom(ws: ElysiaWS) {
+    const roomId = await validateClientInRoom(ws);
+    const room = await validateRoom(roomId);
+
+    if (room.creatorId !== ws.id) {
+        throw new RoomError(ErrorCode.NOT_CREATOR_OF_ROOM);
+    }
+
+    await closeRoom(roomId);
 }
 
-// Video management
+async function closeRoom(roomId: string) {
+    const room = await validateRoom(roomId);
+
+    for (const clientId of room.clients) {
+        const ws = wsConnections.get(clientId);
+        if (ws) {
+            ws.unsubscribe(`room:${roomId}`);
+            sendToClient(ws, {
+                type: 'roomClosed',
+                reason: 'Room closed by creator',
+            });
+        }
+        await redis.hdel(`client:${clientId}`, 'roomId');
+    }
+
+    await redis.del(`room:${roomId}`);
+}
+
+// Video operations
 async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
-    const roomId = await findRoomIdByClient(ws);
-    if (!roomId) {
-        wsLogger.warn(`Add video attempt failed - client not in a room`, { clientId: ws.id });
-        return sendError(ws, 'Not in a room');
-    }
+    const roomId = await validateClientInRoom(ws);
+    const room = await validateRoom(roomId);
 
-    roomLogger.info(`Adding video to room`, {
-        roomId,
-        videoId: video.id,
-        title: video.title,
-    });
-
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) return;
-
-    const room: Room = JSON.parse(roomData);
     if (room.videoQueue.some((v) => v.id === video.id)) {
-        roomLogger.warn(`Video already in queue`, { roomId, videoId: video.id });
-        return sendError(ws, 'Video already in queue');
+        throw new RoomError(ErrorCode.ALREADY_IN_QUEUE);
     }
+
     room.videoQueue.push(video);
 
     if (!room.playingNow) {
         room.playingNow = video;
         room.isPlaying = true;
         room.currentTime = 0;
-        roomLogger.info(`Started playing video`, {
-            roomId,
-            videoId: video.id,
-        });
     }
 
-    try {
-        await redis.set(`room:${roomId}`, JSON.stringify(room));
-        broadcastRoomUpdate(roomId);
-        roomLogger.info(`Video added successfully`, {
-            roomId,
-            videoId: video.id,
-            queueLength: room.videoQueue.length,
-        });
-    } catch (error) {
-        roomLogger.error(`Failed to add video`, {
-            roomId,
-            videoId: video.id,
-            error,
-        });
-    }
+    await redis.set(`room:${roomId}`, JSON.stringify(room));
+    await broadcastRoomUpdate(roomId);
 }
 
 async function playVideoNow(ws: ElysiaWS, video: YouTubeVideo) {
-    const roomId = await findRoomIdByClient(ws);
-    if (!roomId) return sendError(ws, 'Not in a room');
-
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) return;
-
-    const room = JSON.parse(roomData) as Room;
+    const roomId = await validateClientInRoom(ws);
+    const room = await validateRoom(roomId);
 
     if (room.playingNow) {
-        // Remove the video from history if it's there
         room.historyQueue = room.historyQueue.filter((v) => v.id !== video.id);
         room.historyQueue.unshift(room.playingNow);
     }
@@ -319,33 +212,22 @@ async function playVideoNow(ws: ElysiaWS, video: YouTubeVideo) {
     room.playingNow = video;
     room.isPlaying = true;
     room.currentTime = 0;
-
-    // Remove the video from the queue if it's there
     room.videoQueue = room.videoQueue.filter((v) => v.id !== video.id);
 
     await redis.set(`room:${roomId}`, JSON.stringify(room));
-    broadcastRoomUpdate(roomId);
+    await broadcastRoomUpdate(roomId);
 }
 
 async function nextVideo(ws: ElysiaWS) {
-    const roomId = await findRoomIdByClient(ws);
-    if (!roomId) {
-        sendError(ws, 'Not in a room');
-        return;
-    }
-
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) return;
-
-    const room: Room = JSON.parse(roomData);
+    const roomId = await validateClientInRoom(ws);
+    const room = await validateRoom(roomId);
 
     if (room.videoQueue.length > 0) {
-        const upcomingVideo = room.videoQueue.shift()!;
+        const nextVideo = room.videoQueue.shift()!;
         if (room.playingNow) {
-            room.historyQueue = room.historyQueue.filter((v) => v.id !== room.playingNow?.id);
             room.historyQueue.unshift(room.playingNow);
         }
-        room.playingNow = upcomingVideo;
+        room.playingNow = nextVideo;
         room.isPlaying = true;
         room.currentTime = 0;
     } else {
@@ -355,108 +237,68 @@ async function nextVideo(ws: ElysiaWS) {
     }
 
     await redis.set(`room:${roomId}`, JSON.stringify(room));
-    broadcastRoomUpdate(roomId);
+    await broadcastRoomUpdate(roomId);
 }
 
-// Replay functionality
-async function replay(ws: ElysiaWS) {
-    const roomId = await findRoomIdByClient(ws);
-    if (!roomId) return sendError(ws, 'Not in a room');
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) return;
-    const room: Room = JSON.parse(roomData);
-    if (room.playingNow) {
-        room.currentTime = 0;
-        room.isPlaying = true;
-        await redis.set(`room:${roomId}`, JSON.stringify(room));
-
-        broadcastToRoom(roomId, { type: 'replay' });
-    } else {
-        sendError(ws, 'No video is currently playing');
-    }
-}
-
-// Volume control
+// Playback operations
 async function setVolume(ws: ElysiaWS, volume: number) {
-    volume = Math.min(100, Math.max(0, volume));
+    const roomId = await validateClientInRoom(ws);
+    const room = await validateRoom(roomId);
 
-    const roomId = await findRoomIdByClient(ws);
-    if (!roomId) return sendError(ws, 'Not in a room');
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) return;
-    const room: Room = JSON.parse(roomData);
-    room.volume = volume;
+    room.volume = Math.min(100, Math.max(0, volume));
+
     await redis.set(`room:${roomId}`, JSON.stringify(room));
-
-    broadcastToRoom(roomId, { type: 'volumeChanged', volume });
+    broadcastToRoom(roomId, { type: 'volumeChanged', volume: room.volume });
 }
 
-// Play functionality
 async function play(ws: ElysiaWS) {
-    const roomId = await findRoomIdByClient(ws);
-    if (!roomId) return sendError(ws, 'Not in a room');
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) return;
-    const room: Room = JSON.parse(roomData);
-    room.isPlaying = true;
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
+    const roomId = await validateClientInRoom(ws);
+    const room = await validateRoom(roomId);
 
+    room.isPlaying = true;
+
+    await redis.set(`room:${roomId}`, JSON.stringify(room));
     broadcastToRoom(roomId, { type: 'play' });
 }
 
-// Pause functionality
 async function pause(ws: ElysiaWS) {
-    const roomId = await findRoomIdByClient(ws);
-    if (!roomId) return sendError(ws, 'Not in a room');
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) return;
-    const room: Room = JSON.parse(roomData);
-    room.isPlaying = false;
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
+    const roomId = await validateClientInRoom(ws);
+    const room = await validateRoom(roomId);
 
+    room.isPlaying = false;
+
+    await redis.set(`room:${roomId}`, JSON.stringify(room));
     broadcastToRoom(roomId, { type: 'pause' });
 }
 
-// Seek functionality
 async function seek(ws: ElysiaWS, time: number) {
-    const roomId = await findRoomIdByClient(ws);
-    if (!roomId) return sendError(ws, 'Not in a room');
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) return;
-    const room: Room = JSON.parse(roomData);
-    room.currentTime = time;
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
+    const roomId = await validateClientInRoom(ws);
+    const room = await validateRoom(roomId);
 
+    room.currentTime = time;
+
+    await redis.set(`room:${roomId}`, JSON.stringify(room));
     broadcastToRoom(roomId, { type: 'currentTimeChanged', currentTime: time });
 }
 
-async function handleVideoFinished(ws: ElysiaWS) {
-    return nextVideo(ws);
+async function replay(ws: ElysiaWS) {
+    const roomId = await validateClientInRoom(ws);
+    const room = await validateRoom(roomId);
+
+    if (!room.playingNow) {
+        throw new RoomError(ErrorCode.INVALID_MESSAGE, 'No video is currently playing');
+    }
+
+    room.currentTime = 0;
+    room.isPlaying = true;
+
+    await redis.set(`room:${roomId}`, JSON.stringify(room));
+    broadcastToRoom(roomId, { type: 'replay' });
 }
 
-async function getClientInfo(wsId: string): Promise<ClientInfo | null> {
-    const clientInfo = await redis.hgetall(`client:${wsId}`);
-    return clientInfo.roomId ? { id: wsId, roomId: clientInfo.roomId } : null;
-}
-
-async function findRoomIdByClient(ws: ElysiaWS): Promise<string | undefined> {
-    const clientInfo = await getClientInfo(ws.id);
-    return clientInfo?.roomId;
-}
-
-function generateRoomId(): string {
-    return Math.floor(10000000 + Math.random() * 90000000).toString();
-}
-
-async function roomIdExists(roomId: string): Promise<boolean> {
-    return Boolean(await redis.exists(`room:${roomId}`));
-}
-
+// Broadcasting utilities
 async function broadcastToRoom(roomId: string, message: ServerMessage) {
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) return;
-
-    const room: Room = JSON.parse(roomData);
+    const room = await validateRoom(roomId);
     const uniqueClients = new Set(room.clients);
     const disconnectedClients: string[] = [];
 
@@ -466,11 +308,7 @@ async function broadcastToRoom(roomId: string, message: ServerMessage) {
             try {
                 sendToClient(ws, message);
             } catch (error) {
-                wsLogger.error('Error broadcasting to client', {
-                    clientId,
-                    roomId,
-                    error,
-                });
+                wsLogger.error('Error broadcasting to client', { clientId, roomId, error });
                 disconnectedClients.push(clientId);
             }
         } else {
@@ -478,90 +316,136 @@ async function broadcastToRoom(roomId: string, message: ServerMessage) {
         }
     }
 
-    // Clean up disconnected clients
     if (disconnectedClients.length > 0) {
         room.clients = room.clients.filter((id) => !disconnectedClients.includes(id));
         await redis.set(`room:${roomId}`, JSON.stringify(room));
     }
 }
 
-export function sendToClient(ws: ElysiaWS, message: ServerMessage) {
-    ws.send(JSON.stringify(message));
-}
-
-function sendError(ws: ElysiaWS, message: string) {
-    sendToClient(ws, { type: 'error', message });
-}
-
 async function broadcastRoomUpdate(roomId: string) {
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) return;
-    const room: Room = JSON.parse(roomData);
+    const room = await validateRoom(roomId);
     broadcastToRoom(roomId, { type: 'roomUpdate', room });
 }
 
 async function sendRoomUpdate(ws: ElysiaWS, roomId: string) {
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) return;
-    const room: Room = JSON.parse(roomData);
+    const room = await validateRoom(roomId);
     sendToClient(ws, { type: 'roomUpdate', room });
 }
 
 async function updateRoomActivity(roomId: string) {
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) return;
-    const room: Room = JSON.parse(roomData);
+    const room = await validateRoom(roomId);
     room.lastActivity = Date.now();
     await redis.set(`room:${roomId}`, JSON.stringify(room));
 }
 
-async function closeRoom(roomId: string) {
+// Message handler
+async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
     try {
-        const roomData = await redis.get(`room:${roomId}`);
-        if (!roomData) {
-            wsLogger.warn(`Attempted to close non-existent room`, { roomId });
-            return false;
+        if (message?.requiresAck && message.id) {
+            sendToClient(ws, { type: 'ack', messageId: message.id });
         }
 
-        const room: Room = JSON.parse(roomData);
+        switch (message.type) {
+            case 'ping':
+                sendToClient(ws, { type: 'pong' });
+                break;
 
-        wsLogger.info(`Closing room by request`, {
-            roomId: room.id,
-            clientCount: room.clients.length,
-        });
+            case 'createRoom':
+                await createRoom(ws, message.password);
+                break;
 
-        // Get client IDs for cleanup
-        const clientIds = room.clients;
+            case 'joinRoom':
+                await joinRoom(ws, message.roomId, message.password);
+                break;
 
-        // Notify about room closure through pub/sub
-        await redis.publish(
-            'room-notifications',
-            JSON.stringify({
-                type: 'room-closed',
-                roomId: room.id,
-                clientIds,
-                reason: 'Room has been closed by the creator',
-            }),
-        );
+            case 'leaveRoom':
+                await leaveRoom(ws);
+                break;
 
-        // Clean up client mappings
-        for (const clientId of clientIds) {
-            await redis.hdel(`client:${clientId}`, 'roomId');
-            const ws = wsConnections.get(clientId);
-            if (ws) {
-                ws.unsubscribe(`room:${roomId}`);
-            }
+            case 'closeRoom':
+                await handleCloseRoom(ws);
+                break;
+
+            case 'sendMessage':
+                const roomId = await validateClientInRoom(ws);
+                broadcastToRoom(roomId, {
+                    type: 'message',
+                    sender: ws.id,
+                    content: message.message,
+                });
+                break;
+
+            case 'addVideo':
+                await addVideo(ws, message.video);
+                break;
+
+            case 'playNow':
+                await playVideoNow(ws, message.video);
+                break;
+
+            case 'nextVideo':
+                await nextVideo(ws);
+                break;
+
+            case 'setVolume':
+                await setVolume(ws, message.volume);
+                break;
+
+            case 'replay':
+                await replay(ws);
+                break;
+
+            case 'play':
+                await play(ws);
+                break;
+
+            case 'pause':
+                await pause(ws);
+                break;
+
+            case 'seek':
+                await seek(ws, message.time);
+                break;
+
+            case 'videoFinished':
+                await nextVideo(ws);
+                break;
+
+            default:
+                throw new RoomError(ErrorCode.INVALID_MESSAGE);
         }
-
-        // Delete the room
-        await redis.del(`room:${roomId}`);
-        wsLogger.info(`Room closed successfully`, { roomId });
-        return true;
     } catch (error) {
-        wsLogger.error(`Failed to close room`, { roomId, error });
-        return false;
+        handleError(ws, error instanceof Error ? error : new Error('Unknown error'));
     }
 }
+
+// Initialize app
+const app = new Elysia({
+    websocket: {
+        idleTimeout: 960,
+    },
+})
+    .state('wsConnections', wsConnections)
+    .ws('/ws', {
+        schema: {
+            body: t.Object({
+                type: t.String(),
+                payload: t.Any(),
+            }),
+        },
+        open: async (ws) => {
+            wsLogger.info(`Client connected`, { clientId: ws.id });
+            wsConnections.set(ws.id, ws);
+            sendToClient(ws, { type: 'pong' });
+        },
+        close: async (ws) => {
+            wsLogger.info(`Client disconnected`, { clientId: ws.id });
+            await leaveRoom(ws);
+            wsConnections.delete(ws.id);
+        },
+        message: (ws, message: ClientMessage) => handleMessage(ws, message),
+    })
+    .listen(process.env.PORT || 8000);
 
 // Initialize cleanup jobs
 scheduleCleanupJobs().catch(console.error);
