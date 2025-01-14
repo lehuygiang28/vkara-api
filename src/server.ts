@@ -126,8 +126,9 @@ async function joinRoomInternal(ws: ElysiaWS, roomId: string) {
     if (!room.clients.includes(ws.id)) {
         room.clients.push(ws.id);
         await redis.set(`room:${roomId}`, JSON.stringify(room));
-        ws.subscribe(`room:${roomId}`);
     }
+
+    ws.subscribe(roomId);
 
     await Promise.all([
         redis.hset(`client:${ws.id}`, 'roomId', roomId),
@@ -143,7 +144,7 @@ async function leaveRoom(ws: ElysiaWS) {
 async function leaveCurrentRoom(ws: ElysiaWS) {
     const clientInfo = await getClientInfo(ws.id);
     if (clientInfo?.roomId) {
-        ws.unsubscribe(`room:${clientInfo.roomId}`);
+        ws.unsubscribe(clientInfo.roomId);
         const room = await validateRoom(clientInfo.roomId);
         room.clients = room.clients.filter((id) => id !== ws.id);
         await redis.set(`room:${clientInfo.roomId}`, JSON.stringify(room));
@@ -169,7 +170,7 @@ async function closeRoom(roomId: string) {
     for (const clientId of room.clients) {
         const ws = wsConnections.get(clientId);
         if (ws) {
-            ws.unsubscribe(`room:${roomId}`);
+            ws.unsubscribe(roomId);
             sendToClient(ws, {
                 type: 'roomClosed',
                 reason: 'Room closed by creator',
@@ -396,39 +397,7 @@ async function removeVideoFromQueue(ws: ElysiaWS, videoId: string) {
 
 // Broadcasting utilities
 async function broadcastToRoom(roomId: string, message: ServerMessage): Promise<void> {
-    const room = await validateRoom(roomId);
-    const clientIds = new Set(room.clients);
-    const disconnectedClientIds: string[] = [];
-
-    const broadcastPromises = Array.from(clientIds).map(async (clientId) => {
-        const clientWebSocket = wsConnections.get(clientId);
-        if (clientWebSocket) {
-            try {
-                await sendToClient(clientWebSocket, message); // Assuming sendToClient is async
-            } catch {
-                disconnectedClientIds.push(clientId);
-            }
-        } else {
-            disconnectedClientIds.push(clientId);
-        }
-    });
-
-    const results = await Promise.allSettled(broadcastPromises);
-
-    // Optionally log rejections or handle them
-    results.forEach((result, index) => {
-        if (result.status === 'rejected') {
-            console.error(
-                `Broadcast to client ${Array.from(clientIds)[index]} failed:`,
-                result.reason,
-            );
-        }
-    });
-
-    if (disconnectedClientIds.length > 0) {
-        room.clients = room.clients.filter((id) => !disconnectedClientIds.includes(id));
-        await redis.set(`room:${roomId}`, JSON.stringify(room));
-    }
+    app.server?.publish(roomId, JSON.stringify(message));
 }
 
 async function sendRoomUpdate(ws: ElysiaWS, roomId: string) {
