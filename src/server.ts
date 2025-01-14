@@ -345,6 +345,17 @@ async function clearQueue(ws: ElysiaWS) {
     broadcastToRoom(roomId, { type: 'roomUpdate', room });
 }
 
+async function clearHistory(ws: ElysiaWS) {
+    const roomId = await validateClientInRoom(ws);
+    const room = await validateRoom(roomId);
+
+    room.historyQueue = [];
+    room.lastActivity = Date.now();
+
+    await redis.set(`room:${roomId}`, JSON.stringify(room));
+    broadcastToRoom(roomId, { type: 'roomUpdate', room });
+}
+
 // Broadcasting utilities
 async function broadcastToRoom(roomId: string, message: ServerMessage) {
     const room = await validateRoom(roomId);
@@ -470,6 +481,10 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
 
             case 'clearQueue':
                 await clearQueue(ws);
+                break;
+
+            case 'clearHistory':
+                await clearHistory(ws);
                 break;
 
             default:
