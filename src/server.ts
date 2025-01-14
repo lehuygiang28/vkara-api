@@ -17,7 +17,7 @@ export const wsConnections = new Map<string, ElysiaWS>();
 
 // Core utilities
 export function sendToClient(ws: ElysiaWS, message: ServerMessage) {
-    ws.send(JSON.stringify(message));
+    return ws.send(JSON.stringify(message));
 }
 
 function handleError(ws: ElysiaWS, error: Error | RoomError) {
@@ -395,27 +395,38 @@ async function removeVideoFromQueue(ws: ElysiaWS, videoId: string) {
 }
 
 // Broadcasting utilities
-async function broadcastToRoom(roomId: string, message: ServerMessage) {
+async function broadcastToRoom(roomId: string, message: ServerMessage): Promise<void> {
     const room = await validateRoom(roomId);
-    const uniqueClients = new Set(room.clients);
-    const disconnectedClients: string[] = [];
+    const clientIds = new Set(room.clients);
+    const disconnectedClientIds: string[] = [];
 
-    for (const clientId of uniqueClients) {
-        const ws = wsConnections.get(clientId);
-        if (ws) {
+    const broadcastPromises = Array.from(clientIds).map(async (clientId) => {
+        const clientWebSocket = wsConnections.get(clientId);
+        if (clientWebSocket) {
             try {
-                sendToClient(ws, message);
-            } catch (error) {
-                wsLogger.error('Error broadcasting to client', { clientId, roomId, error });
-                disconnectedClients.push(clientId);
+                await sendToClient(clientWebSocket, message); // Assuming sendToClient is async
+            } catch {
+                disconnectedClientIds.push(clientId);
             }
         } else {
-            disconnectedClients.push(clientId);
+            disconnectedClientIds.push(clientId);
         }
-    }
+    });
 
-    if (disconnectedClients.length > 0) {
-        room.clients = room.clients.filter((id) => !disconnectedClients.includes(id));
+    const results = await Promise.allSettled(broadcastPromises);
+
+    // Optionally log rejections or handle them
+    results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+            console.error(
+                `Broadcast to client ${Array.from(clientIds)[index]} failed:`,
+                result.reason,
+            );
+        }
+    });
+
+    if (disconnectedClientIds.length > 0) {
+        room.clients = room.clients.filter((id) => !disconnectedClientIds.includes(id));
         await redis.set(`room:${roomId}`, JSON.stringify(room));
     }
 }
