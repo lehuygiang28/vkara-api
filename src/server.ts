@@ -48,54 +48,62 @@ logger.info(`WebSocket server is running on http://localhost:${port}/ws`);
 
 // Message handler
 async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
-    switch (message.type) {
-        case 'ping':
-            sendToClient(ws, { type: 'pong' });
-            break;
-        case 'createRoom':
-            await createRoom(ws, message.password);
-            break;
-        case 'joinRoom':
-            await joinRoom(ws, message.roomId, message.password);
-            break;
-        case 'leaveRoom':
-            await leaveRoom(ws);
-            break;
-        case 'closeRoom':
-            await handleCloseRoom(ws);
-            break;
-        case 'sendMessage':
-            await sendMessage(ws, message.message);
-            break;
-        case 'addVideo':
-            await addVideo(ws, message.video);
-            break;
-        case 'playNow':
-            await playNow(ws, message.video);
-            break;
-        case 'nextVideo':
-            await nextVideo(ws);
-            break;
-        case 'setVolume':
-            await setVolume(ws, message.volume);
-            break;
-        case 'replay':
-            await replay(ws);
-            break;
-        case 'play':
-            await play(ws);
-            break;
-        case 'pause':
-            await pause(ws);
-            break;
-        case 'seek':
-            await seek(ws, message.time);
-            break;
-        case 'videoFinished':
-            await videoFinished(ws);
-            break;
-        default:
-            sendError(ws, 'Invalid message type');
+    if (String(message?.requiresAck) === 'true' && message.id) {
+        sendToClient(ws, { type: 'ack', messageId: message.id });
+    }
+
+    try {
+        switch (message.type) {
+            case 'ping':
+                sendToClient(ws, { type: 'pong' });
+                break;
+            case 'createRoom':
+                await createRoom(ws, message.password);
+                break;
+            case 'joinRoom':
+                await joinRoom(ws, message.roomId, message.password);
+                break;
+            case 'leaveRoom':
+                await leaveRoom(ws);
+                break;
+            case 'closeRoom':
+                await handleCloseRoom(ws);
+                break;
+            case 'sendMessage':
+                await sendMessage(ws, message.message);
+                break;
+            case 'addVideo':
+                await addVideo(ws, message.video);
+                break;
+            case 'playNow':
+                await playNow(ws, message.video);
+                break;
+            case 'nextVideo':
+                await nextVideo(ws);
+                break;
+            case 'setVolume':
+                await setVolume(ws, message.volume);
+                break;
+            case 'replay':
+                await replay(ws);
+                break;
+            case 'play':
+                await play(ws);
+                break;
+            case 'pause':
+                await pause(ws);
+                break;
+            case 'seek':
+                await seek(ws, message.time);
+                break;
+            case 'videoFinished':
+                await videoFinished(ws);
+                break;
+            default:
+                sendError(ws, 'Invalid message type');
+        }
+    } catch (error) {
+        sendError(ws, 'Error handling message');
     }
 }
 
@@ -447,19 +455,34 @@ async function roomIdExists(roomId: string): Promise<boolean> {
 async function broadcastToRoom(roomId: string, message: ServerMessage) {
     const roomData = await redis.get(`room:${roomId}`);
     if (!roomData) return;
+
     const room: Room = JSON.parse(roomData);
     const uniqueClients = new Set(room.clients);
+    const disconnectedClients: string[] = [];
+
     for (const clientId of uniqueClients) {
         const ws = wsConnections.get(clientId);
         if (ws) {
-            sendToClient(ws, message);
+            try {
+                sendToClient(ws, message);
+            } catch (error) {
+                wsLogger.error('Error broadcasting to client', {
+                    clientId,
+                    roomId,
+                    error,
+                });
+                disconnectedClients.push(clientId);
+            }
         } else {
-            // Remove disconnected clients from the room
-            room.clients = room.clients.filter((id) => id !== clientId);
+            disconnectedClients.push(clientId);
         }
     }
-    // Update the room with potentially removed clients
-    await redis.set(`room:${roomId}`, JSON.stringify(room));
+
+    // Clean up disconnected clients
+    if (disconnectedClients.length > 0) {
+        room.clients = room.clients.filter((id) => !disconnectedClients.includes(id));
+        await redis.set(`room:${roomId}`, JSON.stringify(room));
+    }
 }
 
 export function sendToClient(ws: ElysiaWS, message: ServerMessage) {

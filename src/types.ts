@@ -21,25 +21,35 @@ export interface Room {
     currentTime: number;
 }
 
-export type ClientMessage =
-    | { type: 'ping' }
-    | { type: 'createRoom'; password?: string }
-    | { type: 'joinRoom'; roomId: string; password?: string }
-    | { type: 'leaveRoom' }
-    | { type: 'closeRoom' }
-    | { type: 'sendMessage'; message: string }
-    | { type: 'addVideo'; video: YouTubeVideo }
-    | { type: 'playNow'; video: YouTubeVideo }
-    | { type: 'nextVideo' }
-    | { type: 'setVolume'; volume: number }
-    | { type: 'replay' }
-    | { type: 'play' }
-    | { type: 'pause' }
-    | { type: 'seek'; time: number }
-    | { type: 'videoFinished' };
+export interface MessageBase {
+    id: string;
+    timestamp: number;
+    requiresAck?: boolean;
+}
+
+export type ClientMessage = MessageBase &
+    (
+        | { type: 'ping' }
+        | { type: 'createRoom'; password?: string }
+        | { type: 'joinRoom'; roomId: string; password?: string }
+        | { type: 'leaveRoom' }
+        | { type: 'closeRoom' }
+        | { type: 'sendMessage'; message: string }
+        | { type: 'addVideo'; video: YouTubeVideo }
+        | { type: 'removeVideo'; videoId: string }
+        | { type: 'playNow'; video: YouTubeVideo }
+        | { type: 'nextVideo' }
+        | { type: 'setVolume'; volume: number }
+        | { type: 'replay' }
+        | { type: 'play' }
+        | { type: 'pause' }
+        | { type: 'seek'; time: number }
+        | { type: 'videoFinished' }
+    );
 
 export type ServerMessage =
     | { type: 'pong' }
+    | { type: 'ack'; messageId: string }
     | { type: 'roomCreated'; roomId: string }
     | { type: 'roomUpdate'; room: Room }
     | { type: 'roomNotFound' }
