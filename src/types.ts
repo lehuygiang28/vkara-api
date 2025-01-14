@@ -37,7 +37,7 @@ export type ClientMessage = MessageBase &
         | { type: 'closeRoom' }
         | { type: 'sendMessage'; message: string }
         | { type: 'addVideo'; video: YouTubeVideo }
-        | { type: 'removeVideo'; videoId: string }
+        | { type: 'removeVideoFromQueue'; videoId: string }
         | { type: 'playNow'; video: YouTubeVideo }
         | { type: 'nextVideo' }
         | { type: 'setVolume'; volume: number }
