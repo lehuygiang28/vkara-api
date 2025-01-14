@@ -1,25 +1,11 @@
+import { Video } from 'youtube-sr';
+
 export interface ClientInfo {
     id: string;
     roomId?: string;
 }
 
-export interface YouTubeVideo {
-    id: {
-        videoId: string;
-    };
-    snippet: {
-        title: string;
-        channelTitle: string;
-        thumbnails: {
-            default: {
-                url: string;
-                width: number;
-                height: number;
-            };
-        };
-        publishedAt: string;
-    };
-}
+export type YouTubeVideo = ReturnType<Video['toJSON']>;
 
 export interface Room {
     id: string;

@@ -3,7 +3,7 @@
     "version": "0.0.1",
     "scripts": {
         "dev": "bun run --watch src/index.ts",
-        "b": "bun build --compile --minify --minify-whitespace --minify-syntax --target bun --outfile server ./src/index.ts"
+        "b": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server ./src/index.ts"
     },
     "dependencies": {
         "bullmq": "^5.34.8",
@@ -13,7 +13,8 @@
         "winston": "^3.17.0"
     },
     "devDependencies": {
-        "bun-types": "^1.1.43"
+        "bun-types": "^1.1.43",
+        "youtube-sr": "^4.3.11"
     },
     "module": "src/index.js"
 }

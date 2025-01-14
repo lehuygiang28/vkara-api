@@ -252,8 +252,8 @@ async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
 
     roomLogger.info(`Adding video to room`, {
         roomId,
-        videoId: video.id.videoId,
-        title: video.snippet.title,
+        videoId: video.id,
+        title: video.title,
     });
 
     const roomData = await redis.get(`room:${roomId}`);
@@ -268,7 +268,7 @@ async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
         room.currentTime = 0;
         roomLogger.info(`Started playing video`, {
             roomId,
-            videoId: video.id.videoId,
+            videoId: video.id,
         });
     }
 
@@ -277,13 +277,13 @@ async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
         broadcastRoomUpdate(roomId);
         roomLogger.info(`Video added successfully`, {
             roomId,
-            videoId: video.id.videoId,
+            videoId: video.id,
             queueLength: room.videoQueue.length,
         });
     } catch (error) {
         roomLogger.error(`Failed to add video`, {
             roomId,
-            videoId: video.id.videoId,
+            videoId: video.id,
             error,
         });
     }
@@ -307,7 +307,7 @@ async function playNow(ws: ElysiaWS, video: YouTubeVideo) {
     room.currentTime = 0;
 
     // Remove the video from the queue if it's there
-    room.videoQueue = room.videoQueue.filter((v) => v.id.videoId !== video.id.videoId);
+    room.videoQueue = room.videoQueue.filter((v) => v.id !== video.id);
 
     await redis.set(`room:${roomId}`, JSON.stringify(room));
     broadcastRoomUpdate(roomId);
