@@ -76,7 +76,7 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
                 await addVideo(ws, message.video);
                 break;
             case 'playNow':
-                await playNow(ws, message.video);
+                await playVideoNow(ws, message.video);
                 break;
             case 'nextVideo':
                 await nextVideo(ws);
@@ -97,7 +97,7 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
                 await seek(ws, message.time);
                 break;
             case 'videoFinished':
-                await videoFinished(ws);
+                await handleVideoFinished(ws);
                 break;
             default:
                 sendError(ws, 'Invalid message type');
@@ -268,6 +268,10 @@ async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
     if (!roomData) return;
 
     const room: Room = JSON.parse(roomData);
+    if (room.videoQueue.some((v) => v.id === video.id)) {
+        roomLogger.warn(`Video already in queue`, { roomId, videoId: video.id });
+        return sendError(ws, 'Video already in queue');
+    }
     room.videoQueue.push(video);
 
     if (!room.playingNow) {
@@ -297,16 +301,18 @@ async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
     }
 }
 
-async function playNow(ws: ElysiaWS, video: YouTubeVideo) {
+async function playVideoNow(ws: ElysiaWS, video: YouTubeVideo) {
     const roomId = await findRoomIdByClient(ws);
     if (!roomId) return sendError(ws, 'Not in a room');
 
     const roomData = await redis.get(`room:${roomId}`);
     if (!roomData) return;
 
-    const room: Room = JSON.parse(roomData);
+    const room = JSON.parse(roomData) as Room;
 
     if (room.playingNow) {
+        // Remove the video from history if it's there
+        room.historyQueue = room.historyQueue.filter((v) => v.id !== video.id);
         room.historyQueue.unshift(room.playingNow);
     }
 
@@ -323,27 +329,33 @@ async function playNow(ws: ElysiaWS, video: YouTubeVideo) {
 
 async function nextVideo(ws: ElysiaWS) {
     const roomId = await findRoomIdByClient(ws);
-    if (!roomId) return sendError(ws, 'Not in a room');
+    if (!roomId) {
+        sendError(ws, 'Not in a room');
+        return;
+    }
+
     const roomData = await redis.get(`room:${roomId}`);
     if (!roomData) return;
+
     const room: Room = JSON.parse(roomData);
+
     if (room.videoQueue.length > 0) {
-        const nextVideo = room.videoQueue.shift()!;
+        const upcomingVideo = room.videoQueue.shift()!;
         if (room.playingNow) {
+            room.historyQueue = room.historyQueue.filter((v) => v.id !== room.playingNow?.id);
             room.historyQueue.unshift(room.playingNow);
         }
-        room.playingNow = nextVideo;
+        room.playingNow = upcomingVideo;
         room.isPlaying = true;
         room.currentTime = 0;
-        await redis.set(`room:${roomId}`, JSON.stringify(room));
-        broadcastRoomUpdate(roomId);
     } else {
         room.playingNow = null;
         room.isPlaying = false;
         room.currentTime = 0;
-        await redis.set(`room:${roomId}`, JSON.stringify(room));
-        broadcastRoomUpdate(roomId);
     }
+
+    await redis.set(`room:${roomId}`, JSON.stringify(room));
+    broadcastRoomUpdate(roomId);
 }
 
 // Replay functionality
@@ -418,20 +430,8 @@ async function seek(ws: ElysiaWS, time: number) {
     broadcastToRoom(roomId, { type: 'currentTimeChanged', currentTime: time });
 }
 
-async function videoFinished(ws: ElysiaWS) {
-    const roomId = await findRoomIdByClient(ws);
-    if (!roomId) return sendError(ws, 'Not in a room');
-    const roomData = await redis.get(`room:${roomId}`);
-    if (!roomData) return;
-    const room: Room = JSON.parse(roomData);
-    if (room.playingNow) {
-        room.historyQueue.unshift(room.playingNow);
-        room.playingNow = null;
-        room.isPlaying = false;
-        room.currentTime = 0;
-        await redis.set(`room:${roomId}`, JSON.stringify(room));
-    }
-    await nextVideo(ws);
+async function handleVideoFinished(ws: ElysiaWS) {
+    return nextVideo(ws);
 }
 
 async function getClientInfo(wsId: string): Promise<ClientInfo | null> {
