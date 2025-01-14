@@ -1,4 +1,5 @@
 import { Video } from 'youtube-sr';
+import { ErrorCode } from './errors';
 
 export interface ClientInfo {
     id: string;
@@ -45,6 +46,7 @@ export type ClientMessage = MessageBase &
         | { type: 'pause' }
         | { type: 'seek'; time: number }
         | { type: 'videoFinished' }
+        | { type: 'moveToTop'; videoId: string }
     );
 
 export type ServerMessage =
@@ -63,13 +65,3 @@ export type ServerMessage =
     | { type: 'pause' }
     | { type: 'volumeChanged'; volume: number }
     | { type: 'currentTimeChanged'; currentTime: number };
-
-export type ErrorCode =
-    | 'internalError'
-    | 'invalidMessage'
-    | 'roomNotFound'
-    | 'notInRoom'
-    | 'incorrectPassword'
-    | 'roomClosed'
-    | 'notCreatorOfRoom'
-    | 'alreadyInQueue';

@@ -305,6 +305,23 @@ async function replay(ws: ElysiaWS) {
     broadcastToRoom(roomId, { type: 'replay' });
 }
 
+async function moveVideoToTop(ws: ElysiaWS, videoId: string) {
+    const roomId = await validateClientInRoom(ws);
+    const room = await validateRoom(roomId);
+
+    const videoForMove = room.videoQueue.find((v) => v.id === videoId);
+    if (!videoForMove) {
+        throw new RoomError(ErrorCode.VIDEO_NOT_FOUND, 'Video not found in queue');
+    }
+
+    room.videoQueue = room.videoQueue.filter((v) => v.id !== videoId);
+    room.videoQueue.unshift(videoForMove);
+    room.lastActivity = Date.now();
+
+    await redis.set(`room:${roomId}`, JSON.stringify(room));
+    broadcastToRoom(roomId, { type: 'roomUpdate', room });
+}
+
 // Broadcasting utilities
 async function broadcastToRoom(roomId: string, message: ServerMessage) {
     const room = await validateRoom(roomId);
@@ -418,6 +435,10 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
 
             case 'videoFinished':
                 await nextVideo(ws);
+                break;
+
+            case 'moveToTop':
+                await moveVideoToTop(ws, message.videoId);
                 break;
 
             default:

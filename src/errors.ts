@@ -7,6 +7,7 @@ export enum ErrorCode {
     ROOM_CLOSED = 'roomClosed',
     NOT_CREATOR_OF_ROOM = 'notCreatorOfRoom',
     ALREADY_IN_QUEUE = 'alreadyInQueue',
+    VIDEO_NOT_FOUND = 'videoNotFound',
 }
 
 export interface ErrorResponse {
@@ -32,6 +33,7 @@ function getDefaultErrorMessage(code: ErrorCode): string {
         [ErrorCode.ROOM_CLOSED]: 'Room has been closed',
         [ErrorCode.NOT_CREATOR_OF_ROOM]: 'Only the room creator can perform this action',
         [ErrorCode.ALREADY_IN_QUEUE]: 'Video is already in queue',
+        [ErrorCode.VIDEO_NOT_FOUND]: 'Video not found',
     };
     return messages[code];
 }
