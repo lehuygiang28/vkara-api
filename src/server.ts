@@ -4,7 +4,7 @@ import { Redis } from 'ioredis';
 import * as mongoose from 'mongoose';
 
 import { syncFromMongoDB, syncToMongoDB } from '@/mongodb-sync';
-import { isNullish, shuffleArray } from '@/utils/common';
+import { generateRandomNumber, isNullish, shuffleArray } from '@/utils/common';
 import { wsLogger, roomLogger, createContextLogger } from '@/utils/logger';
 import { ErrorCode, RoomError } from '@/errors';
 import { scheduleCleanupJobs } from '@/queues/cleanup';
@@ -82,10 +82,6 @@ async function findRoomIdByClient(ws: ElysiaWS): Promise<string | undefined> {
     return clientInfo?.roomId;
 }
 
-function generateRoomId(): string {
-    return Math.floor(10000000 + Math.random() * 90000000).toString();
-}
-
 async function roomIdExists(roomId: string): Promise<boolean> {
     return Boolean(await redis.exists(`room:${roomId}`));
 }
@@ -96,7 +92,7 @@ async function createRoom(ws: ElysiaWS, password?: string) {
     let roomExists: boolean;
 
     do {
-        roomId = generateRoomId();
+        roomId = generateRandomNumber({ digits: 6 }).toString();
         roomExists = await roomIdExists(roomId);
     } while (roomExists);
 

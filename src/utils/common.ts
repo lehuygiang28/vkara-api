@@ -1,4 +1,20 @@
 /**
+ * Generates a random number with a specified number of digits.
+ * @param {Object} [options] An object with options.
+ * @param {number} [options.digits=6] The number of digits to use for the random number.
+ * @returns {number} The generated number.
+ * @example
+ * const randomNumber = generateRandomNumber({ digits: 4 });
+ * // randomNumber might be 8359
+ */
+export function generateRandomNumber({ digits = 6 }: { digits?: number } = {}): number {
+    const min = 10 ** (digits - 1);
+    const max = 9 * 10 ** (digits - 1);
+
+    return Math.floor(min + Math.random() * (max - min + 1));
+}
+
+/**
  * Shuffles an array in-place.
  * @param array The array to shuffle.
  * @returns The shuffled array.
