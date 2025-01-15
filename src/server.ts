@@ -219,7 +219,7 @@ async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
         room.isPlaying = true;
         room.currentTime = 0;
     } else {
-        room.videoQueue.push(video);
+        room.videoQueue = [...room.videoQueue, video];
     }
     room.lastActivity = Date.now();
 
@@ -233,15 +233,16 @@ async function playVideoNow(ws: ElysiaWS, video: YouTubeVideo) {
     const roomId = await validateClientInRoom(ws);
     const room = await validateRoom(roomId);
 
+    room.historyQueue = room.historyQueue.filter((v) => v.id !== video.id);
+    room.videoQueue = room.videoQueue.filter((v) => v.id !== video.id);
+
     if (room.playingNow) {
-        room.historyQueue = room.historyQueue.filter((v) => v.id !== video.id);
-        room.historyQueue.unshift(room.playingNow);
+        room.historyQueue = [room.playingNow, ...room.historyQueue];
     }
 
     room.playingNow = video;
     room.isPlaying = true;
     room.currentTime = 0;
-    room.videoQueue = room.videoQueue.filter((v) => v.id !== video.id);
     room.lastActivity = Date.now();
 
     await Promise.all([
@@ -254,11 +255,15 @@ async function nextVideo(ws: ElysiaWS) {
     const roomId = await validateClientInRoom(ws);
     const room = await validateRoom(roomId);
 
+    if (room.playingNow && room.playingNow.id) {
+        room.historyQueue = [
+            room.playingNow,
+            ...room.historyQueue.filter((v) => v.id !== room.playingNow!.id),
+        ];
+    }
+
     if (room.videoQueue.length > 0) {
         const nextVideo = room.videoQueue.shift()!;
-        if (room.playingNow) {
-            room.historyQueue.unshift(room.playingNow);
-        }
         room.playingNow = nextVideo;
         room.isPlaying = true;
         room.currentTime = 0;
