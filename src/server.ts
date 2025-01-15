@@ -191,14 +191,14 @@ async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
         throw new RoomError(ErrorCode.ALREADY_IN_QUEUE);
     }
 
-    room.videoQueue.push(video);
-    room.lastActivity = Date.now();
-
-    if (!room.playingNow) {
+    if (!room?.playingNow && room?.videoQueue?.length <= 0) {
         room.playingNow = video;
         room.isPlaying = true;
         room.currentTime = 0;
+    } else {
+        room.videoQueue.push(video);
     }
+    room.lastActivity = Date.now();
 
     await Promise.all([
         redis.set(`room:${roomId}`, JSON.stringify(room)),
@@ -218,8 +218,8 @@ async function playVideoNow(ws: ElysiaWS, video: YouTubeVideo) {
     room.playingNow = video;
     room.isPlaying = true;
     room.currentTime = 0;
-    room.lastActivity = Date.now();
     room.videoQueue = room.videoQueue.filter((v) => v.id !== video.id);
+    room.lastActivity = Date.now();
 
     await Promise.all([
         redis.set(`room:${roomId}`, JSON.stringify(room)),
