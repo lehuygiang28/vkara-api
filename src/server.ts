@@ -3,7 +3,7 @@ import { ElysiaWS } from 'elysia/dist/ws';
 import { Redis } from 'ioredis';
 import * as mongoose from 'mongoose';
 
-import { syncFromMongoDB } from '@/mongodb-sync';
+import { syncFromMongoDB, syncToMongoDB } from '@/mongodb-sync';
 import { shuffleArray } from '@/utils/common';
 import { wsLogger, roomLogger, createContextLogger } from '@/utils/logger';
 import { ErrorCode, RoomError } from '@/errors';
@@ -561,12 +561,21 @@ const app = new Elysia({
         // Sync data from MongoDB to Redis on startup
         await syncFromMongoDB(redis);
     })
-    .on('stop', async (error) => {
+    .on('stop', async () => {
         serverLogger.info('Server stop initiated');
+        await syncToMongoDB(redis);
     })
     .listen(process.env.PORT || 8000);
 
 // Initialize cleanup jobs
 scheduleCleanupJobs().catch(serverLogger.error);
+
+process.on('beforeExit', async () => {
+    serverLogger.info('Server stopping');
+    await syncToMongoDB(redis);
+    await redis.quit();
+    await mongoose.disconnect();
+    await app.stop();
+});
 
 export type ElysiaApp = typeof app;
