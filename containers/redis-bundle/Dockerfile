@@ -2,13 +2,13 @@ FROM oven/bun:alpine AS build
 
 WORKDIR /app
 
-# Cache packages installation
 COPY package.json package.json
 COPY bun.lockb bun.lockb
-
-RUN bun install
+COPY ./tsconfig.json ./tsconfig.json
 
 COPY ./src ./src
+
+RUN bun install
 
 ENV NODE_ENV=production
 
