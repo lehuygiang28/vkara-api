@@ -1,11 +1,12 @@
 import { Elysia, t } from 'elysia';
 import { ElysiaWS } from 'elysia/dist/ws';
 import { Redis } from 'ioredis';
-import { scheduleCleanupJobs } from './queues/cleanup';
-import { wsLogger, roomLogger, logger } from './utils/logger';
-import { shuffleArray } from './utils/common';
-import type { ClientMessage, ServerMessage, Room, ClientInfo, YouTubeVideo } from './types';
-import { ErrorCode, RoomError } from './errors';
+
+import { shuffleArray } from '@/utils/common';
+import { wsLogger, roomLogger, logger } from '@/utils/logger';
+import { ErrorCode, RoomError } from '@/errors';
+import { scheduleCleanupJobs } from '@/queues/cleanup';
+import type { ClientMessage, ServerMessage, Room, ClientInfo, YouTubeVideo } from '@/types';
 
 const redis = new Redis({
     host: process.env.REDIS_HOST || 'localhost',

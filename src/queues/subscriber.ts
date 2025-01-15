@@ -1,6 +1,7 @@
 import { Redis } from 'ioredis';
-import { sendToClient, wsConnections } from '../server';
-import { redisLogger, roomLogger } from '../utils/logger';
+
+import { sendToClient, wsConnections } from '@/server';
+import { redisLogger, roomLogger } from '@/utils/logger';
 
 const subscriber = new Redis({
     host: process.env.REDIS_HOST || 'localhost',

@@ -1,5 +1,5 @@
 import { Video } from 'youtube-sr';
-import { ErrorCode } from './errors';
+import { ErrorCode } from '@/errors';
 
 export interface ClientInfo {
     id: string;

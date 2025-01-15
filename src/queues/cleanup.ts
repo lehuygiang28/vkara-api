@@ -1,7 +1,8 @@
 import { Redis } from 'ioredis';
 import { Queue, Worker } from 'bullmq';
-import type { Room } from '../types';
-import { cleanupLogger } from '../utils/logger';
+
+import type { Room } from '@/types';
+import { cleanupLogger } from '@/utils/logger';
 
 const INACTIVE_TIMEOUT = parseInt(process.env.INACTIVE_TIMEOUT || '300') * 1000; // default 5 minutes
 
