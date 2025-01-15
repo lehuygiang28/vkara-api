@@ -4,7 +4,7 @@ import { Redis } from 'ioredis';
 import * as mongoose from 'mongoose';
 
 import { syncFromMongoDB, syncToMongoDB } from '@/mongodb-sync';
-import { shuffleArray } from '@/utils/common';
+import { isNullish, shuffleArray } from '@/utils/common';
 import { wsLogger, roomLogger, createContextLogger } from '@/utils/logger';
 import { ErrorCode, RoomError } from '@/errors';
 import { scheduleCleanupJobs } from '@/queues/cleanup';
@@ -12,6 +12,7 @@ import type { ClientMessage, ServerMessage, Room, ClientInfo, YouTubeVideo } fro
 import { scheduleSyncRedisToDb } from './queues/sync';
 
 const serverLogger = createContextLogger('Server');
+const IS_ENCRYPTED_PASSWORD = process.env.IS_ENCRYPTED_PASSWORD === 'true';
 
 const redis = new Redis({
     host: process.env.REDIS_HOST || 'localhost',
@@ -103,7 +104,9 @@ async function createRoom(ws: ElysiaWS, password?: string) {
 
     const room: Room = {
         id: roomId,
-        password: password
+        password: !IS_ENCRYPTED_PASSWORD
+            ? password
+            : !isNullish(password)
             ? await Bun.password.hash(password, {
                   algorithm: 'bcrypt',
                   cost: 4,
@@ -128,8 +131,14 @@ async function createRoom(ws: ElysiaWS, password?: string) {
 async function joinRoom(ws: ElysiaWS, roomId: string, password?: string) {
     const room = await validateRoom(roomId);
 
-    if (room.password && (!password || !(await Bun.password.verify(password, room.password)))) {
-        throw new RoomError(ErrorCode.INCORRECT_PASSWORD);
+    if (!isNullish(password) && !isNullish(room?.password)) {
+        const isPasswordValid = IS_ENCRYPTED_PASSWORD
+            ? await Bun.password.verify(password, room.password)
+            : password === room.password;
+
+        if (!isPasswordValid) {
+            throw new RoomError(ErrorCode.INCORRECT_PASSWORD);
+        }
     }
 
     await joinRoomInternal(ws, roomId);

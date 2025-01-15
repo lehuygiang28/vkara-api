@@ -22,3 +22,17 @@ export function shuffleArray<T>(array: T[]): T[] {
 
     return array.sort(() => Math.random() - 0.5);
 }
+
+/**
+ * Checks if a given value is null or undefined.
+ * @param value The value to check.
+ * @returns A boolean indicating whether the value is null or undefined.
+ * @example
+ * isNullish(null); // true
+ * isNullish(undefined); // true
+ * isNullish(0); // false
+ */
+
+export function isNullish<T>(value: T | null | undefined): value is null | undefined {
+    return value === null || value === undefined;
+}
