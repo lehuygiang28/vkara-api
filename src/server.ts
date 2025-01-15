@@ -155,7 +155,7 @@ async function joinRoomInternal(ws: ElysiaWS, roomId: string) {
 
     await Promise.all([
         redis.hset(`client:${ws.id}`, 'roomId', roomId),
-        sendRoomUpdate(ws, roomId),
+        sendToClient(ws, { type: 'roomJoined', yourId: ws.id, room }),
     ]);
 }
 

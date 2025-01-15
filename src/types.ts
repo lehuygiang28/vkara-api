@@ -55,6 +55,7 @@ export type ClientMessage = MessageBase &
 export type ServerMessage =
     | { type: 'pong' }
     | { type: 'ack'; messageId: string }
+    | { type: 'roomJoined'; yourId: string; room: Room }
     | { type: 'roomCreated'; roomId: string }
     | { type: 'roomUpdate'; room: Room }
     | { type: 'roomNotFound' }
