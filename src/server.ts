@@ -1,18 +1,35 @@
 import { Elysia, t } from 'elysia';
 import { ElysiaWS } from 'elysia/dist/ws';
 import { Redis } from 'ioredis';
+import * as mongoose from 'mongoose';
 
+import { syncFromMongoDB } from '@/mongodb-sync';
 import { shuffleArray } from '@/utils/common';
-import { wsLogger, roomLogger, logger } from '@/utils/logger';
+import { wsLogger, roomLogger, createContextLogger } from '@/utils/logger';
 import { ErrorCode, RoomError } from '@/errors';
 import { scheduleCleanupJobs } from '@/queues/cleanup';
 import type { ClientMessage, ServerMessage, Room, ClientInfo, YouTubeVideo } from '@/types';
+import { scheduleSyncRedisToDb } from './queues/sync';
+
+const serverLogger = createContextLogger('Server');
 
 const redis = new Redis({
     host: process.env.REDIS_HOST || 'localhost',
     port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT) : 6379,
     password: process.env.REDIS_PASSWORD,
 });
+
+if (process.env.MONGODB_URI) {
+    mongoose
+        .connect(process.env.MONGODB_URI)
+        .then(() => {
+            serverLogger.info('MongoDB connected');
+            scheduleSyncRedisToDb().catch(serverLogger.error);
+        })
+        .catch((error) => {
+            serverLogger.error('MongoDB connection error', { error });
+        });
+}
 
 export const wsConnections = new Map<string, ElysiaWS>();
 
@@ -33,7 +50,7 @@ function handleError(ws: ElysiaWS, error: Error | RoomError) {
             type: 'error',
             message: 'An unexpected error occurred',
         });
-        logger.error('Unexpected error', { error });
+        serverLogger.error('Unexpected error', { error });
     }
 }
 
@@ -539,9 +556,17 @@ const app = new Elysia({
         },
         message: (ws, message: ClientMessage) => handleMessage(ws, message),
     })
+    .on('start', async () => {
+        serverLogger.info('Server started');
+        // Sync data from MongoDB to Redis on startup
+        await syncFromMongoDB(redis);
+    })
+    .on('stop', async (error) => {
+        serverLogger.info('Server stop initiated');
+    })
     .listen(process.env.PORT || 8000);
 
 // Initialize cleanup jobs
-scheduleCleanupJobs().catch(console.error);
+scheduleCleanupJobs().catch(serverLogger.error);
 
 export type ElysiaApp = typeof app;

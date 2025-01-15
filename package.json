@@ -10,6 +10,7 @@
         "chalk": "^5.4.1",
         "elysia": "^1.2.10",
         "ioredis": "^5.4.2",
+        "mongoose": "^8.9.5",
         "winston": "^3.17.0"
     },
     "devDependencies": {
