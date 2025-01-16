@@ -52,6 +52,11 @@ RUN touch /app/supervisord.pid && \
     mkdir -p ./log && \
     chown node:node ./log
 
+COPY package.json package.json
+COPY bun.lockb bun.lockb
+COPY ./tsconfig.json ./tsconfig.json
+COPY ./src ./src
+
 RUN chown node:node /app
 RUN npm i -g bun
 RUN bun install --production
