@@ -51,7 +51,13 @@ RUN chmod +x ./entrypoint.sh && \
     mkdir -p ./log && chown pptruser:pptruser ./log
 
 # Set application permissions
-RUN chmod +x /app/server && chown pptruser:pptruser /app
+RUN chmod +x /app/server && \
+    chown pptruser:pptruser /app && \
+    chown pptruser:pptruser /home/pptruser && \
+    mkdir -p /home/pptruser/Downloads && \
+    chown pptruser:pptruser /home/pptruser/Downloads
+
+RUN bun x puppeteer browsers install chrome
 
 ENV NODE_ENV=production
 
