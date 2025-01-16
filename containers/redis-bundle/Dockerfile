@@ -26,36 +26,36 @@ USER root
 WORKDIR /app
 
 RUN mkdir -p /app && \
-    chown nobody:nobody /app
-COPY --chown=nobody:nobody --from=build /app/server server
+    chown node:node /app
+COPY --chown=node:node --from=build /app/server server
 RUN chmod +x /app/server && \
-    chown nobody:nobody /app/server
+    chown node:node /app/server
 
 RUN apk update && \
     apk add --no-cache supervisor redis
 
-COPY --chown=nobody:nobody ./containers/redis-bundle/supervisord.conf ./supervisord.conf
-COPY --chown=nobody:nobody ./containers/redis-bundle/entrypoint.sh ./entrypoint.sh
+COPY --chown=node:node ./containers/redis-bundle/supervisord.conf ./supervisord.conf
+COPY --chown=node:node ./containers/redis-bundle/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
 RUN touch /app/supervisord.pid && \
-    chown nobody:nobody /app/supervisord.pid && \
+    chown node:node /app/supervisord.pid && \
     touch /app/supervisord.log && \
-    chown nobody:nobody /app/supervisord.log && \
+    chown node:node /app/supervisord.log && \
     chmod 755 /app/supervisord.conf && \ 
     chmod 644 /app/supervisord.log && \
     chmod 644 /app/supervisord.pid
 
 RUN mkdir -p ./log && \
-    chown nobody:nobody ./log
+    chown node:node ./log
 
-RUN chown nobody:nobody /app
+RUN chown node:node /app
 RUN npm i -g bun
 RUN npx puppeteer browsers install chrome --platform=linux --install-deps
 
 ENV NODE_ENV=production
 
-USER nobody
+USER node
 
 ENTRYPOINT ["./entrypoint.sh"]
 
