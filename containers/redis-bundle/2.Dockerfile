@@ -12,13 +12,7 @@ RUN bun install
 
 ENV NODE_ENV=production
 
-RUN bun build \
-    --compile \
-    --minify-whitespace \
-    --minify-syntax \
-    --target bun \
-    --outfile server \
-    ./src/index.ts
+RUN bun run build2
 
 FROM build AS production
 
@@ -26,7 +20,7 @@ WORKDIR /app
 
 RUN mkdir -p /app && \
     chown nobody:nobody /app
-COPY --chown=nobody:nobody --from=build /app/server server
+COPY --chown=nobody:nobody --from=build /app/server server2
 RUN chmod +x /app/server && \
     chown nobody:nobody /app/server
 

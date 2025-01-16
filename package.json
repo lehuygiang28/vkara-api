@@ -3,8 +3,9 @@
     "version": "0.0.1",
     "scripts": {
         "dev": "bun run --watch src/index.ts",
-        "c": "bun run --watch src/check-youtube-available.ts",
-        "b": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server ./src/index.ts"
+        "dev2": "bun run --watch src/check-youtube-available.ts",
+        "b": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server ./src/index.ts",
+        "build2": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server2 ./src/check-youtube-available.ts"
     },
     "dependencies": {
         "bullmq": "^5.34.8",

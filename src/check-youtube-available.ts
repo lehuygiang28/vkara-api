@@ -90,29 +90,32 @@ const checkEmbedStatus = async (videoId: string): Promise<boolean> => {
     }
 };
 
-export const elysiaYoutubeChecker = new Elysia().onStart(initBrowser).post(
-    '/check-embed',
-    async ({ body: { videoIds } }) => {
-        await initBrowser(); // Ensure browser is initialized
+export const elysiaYoutubeChecker = new Elysia()
+    .onStart(initBrowser)
+    .post(
+        '/check-embed',
+        async ({ body: { videoIds } }) => {
+            await initBrowser(); // Ensure browser is initialized
 
-        const results = await Promise.all(
-            videoIds.map(async (videoId: string) => {
-                const cachedStatus = await getCachedStatus(videoId);
-                if (cachedStatus !== null) {
-                    return { videoId, canEmbed: cachedStatus };
-                }
-                return {
-                    videoId,
-                    canEmbed: await checkEmbedStatus(videoId),
-                };
+            const results = await Promise.all(
+                videoIds.map(async (videoId: string) => {
+                    const cachedStatus = await getCachedStatus(videoId);
+                    if (cachedStatus !== null) {
+                        return { videoId, canEmbed: cachedStatus };
+                    }
+                    return {
+                        videoId,
+                        canEmbed: await checkEmbedStatus(videoId),
+                    };
+                }),
+            );
+
+            return results;
+        },
+        {
+            body: t.Object({
+                videoIds: t.Array(t.String()),
             }),
-        );
-
-        return results;
-    },
-    {
-        body: t.Object({
-            videoIds: t.Array(t.String()),
-        }),
-    },
-);
+        },
+    )
+    .listen(8001);
