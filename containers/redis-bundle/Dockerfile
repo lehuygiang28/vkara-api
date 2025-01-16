@@ -24,6 +24,8 @@ FROM ghcr.io/puppeteer/puppeteer:16.1.0 AS production
 
 WORKDIR /app
 
+USER root
+
 RUN npm install -g bun
 
 RUN mkdir -p /app && \
