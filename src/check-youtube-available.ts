@@ -1,8 +1,13 @@
 import { Elysia, t } from 'elysia';
 import puppeteer, { Browser } from 'puppeteer';
+import locateChrome from 'locate-chrome';
+
 import { redis } from './redis';
 import { createContextLogger } from './utils/logger';
 
+const executablePath = (await new Promise((resolve) =>
+    locateChrome((arg: any) => resolve(arg)),
+)) as string;
 const logger = createContextLogger('check-youtube-available');
 let browser: Browser;
 
@@ -24,6 +29,7 @@ const initBrowser = async () => {
     if (!browser) {
         browser = await puppeteer.launch({
             headless: true,
+            executablePath,
         });
     }
 };
