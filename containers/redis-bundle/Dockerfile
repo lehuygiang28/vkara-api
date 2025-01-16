@@ -54,6 +54,7 @@ RUN touch /app/supervisord.pid && \
 
 RUN chown node:node /app
 RUN npm i -g bun
+RUN bun install --production
 RUN npx puppeteer browsers install chrome --platform=linux --install-deps
 
 ENV NODE_ENV=production
