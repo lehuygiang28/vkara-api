@@ -32,7 +32,7 @@ RUN  apt-get install lsb-release curl gpg && \
     apt-get install redis
 
 RUN apt-get update && \
-    apt-get install -y supervisor redis-server && \
+    apt-get install -y supervisor && \
     chmod +x /usr/bin/supervisord && \
     chmod +x /usr/bin/redis-server && \
     chown pptruser:pptruser /usr/bin/supervisord && \
