@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 # goto https://github.com/puppeteer/puppeteer/blob/main/docs/troubleshooting.md#running-puppeteer-on-wsl-windows-subsystem-for-linux
 RUN apt-get update && apt-get install -y libgtk-3-dev libnotify-dev libgconf-2-4 libnss3 libxss1 libasound2
 
+RUN apk add --no-cache supervisor redis
+
 # Set the working directory
 RUN mkdir app
 WORKDIR /app
@@ -22,6 +24,21 @@ RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
     && chown -R pptruser:pptruser /home/pptruser \
     && chown -R pptruser:pptruser /app
 
+COPY --chown=pptruser:pptruser ./containers/redis-bundle/supervisord-2.conf ./supervisord.conf
+COPY --chown=pptruser:pptruser ./containers/redis-bundle/entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
+
+RUN touch /app/supervisord.pid && \
+    chown pptruser:pptruser /app/supervisord.pid && \
+    touch /app/supervisord.log && \
+    chown pptruser:pptruser /app/supervisord.log && \
+    chmod 755 /app/supervisord.conf && \ 
+    chmod 644 /app/supervisord.log && \
+    chmod 644 /app/supervisord.pid
+
+RUN mkdir -p ./log && \
+    chown pptruser:pptruser ./log
+
 # Run everything after as non-privileged user.
 USER pptruser
 
@@ -29,6 +46,6 @@ USER pptruser
 RUN bun i
 RUN bun x puppeteer browsers install chrome
 
-EXPOSE 4010
+EXPOSE 8001
 
-CMD ["bun", "run", "dev2"]
+ENTRYPOINT ["./entrypoint.sh"]
