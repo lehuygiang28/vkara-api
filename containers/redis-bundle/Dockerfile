@@ -20,9 +20,11 @@ RUN bun build \
     --outfile server \
     ./src/index.ts
 
-FROM build AS production
+FROM ghcr.io/puppeteer/puppeteer:16.1.0 AS production
 
 WORKDIR /app
+
+RUN npm install -g bun
 
 RUN mkdir -p /app && \
     chown nobody:nobody /app
