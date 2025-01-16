@@ -27,7 +27,10 @@ RUN mkdir -p /app && chown pptruser:pptruser /app
 # Copy built server files
 COPY --from=build --chown=pptruser:pptruser /app/server2 ./server
 
-# Fix GPG error for Google Chrome repository
+# Clean up old Google Chrome configurations
+RUN rm -f /etc/apt/sources.list.d/google-chrome.list
+
+# Add Google Chrome repository
 RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg && \
     echo "deb [signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] https://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
 
