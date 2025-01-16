@@ -52,15 +52,9 @@ RUN touch /app/supervisord.pid && \
     mkdir -p ./log && \
     chown node:node ./log
 
-COPY package.json package.json
-COPY bun.lockb bun.lockb
-COPY ./tsconfig.json ./tsconfig.json
-COPY ./src ./src
-
 RUN chown node:node /app
-RUN npm i -g bun
-RUN bun install --production
-RUN npx puppeteer browsers install chrome --platform=linux --install-deps
+RUN npm i -g bun puppeteer
+RUN npx puppeteer browsers install --platform=linux --install-deps
 
 ENV NODE_ENV=production
 
