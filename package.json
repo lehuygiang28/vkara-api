@@ -3,19 +3,22 @@
     "version": "0.0.1",
     "scripts": {
         "dev": "bun run --watch src/index.ts",
-        "c": "bun run --watch src/check-youtube-available.ts",
-        "b": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server ./src/index.ts"
+        "dev2": "bun run --watch src/check-youtube-available.ts",
+        "b": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server ./src/index.ts",
+        "build2": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server2 ./src/check-youtube-available.ts"
     },
     "dependencies": {
         "bullmq": "^5.34.8",
         "chalk": "^5.4.1",
         "elysia": "^1.2.10",
         "ioredis": "^5.4.2",
+        "locate-chrome": "^0.1.1",
         "mongoose": "^8.9.5",
         "puppeteer": "^24.1.0",
         "winston": "^3.17.0"
     },
     "devDependencies": {
+        "@types/locate-chrome": "^0.1.2",
         "bun-types": "^1.1.43",
         "typescript": "^5.7.3",
         "youtube-sr": "^4.3.11"

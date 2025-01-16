@@ -9,7 +9,6 @@ import { ErrorCode, RoomError } from '@/errors';
 import { scheduleCleanupJobs } from '@/queues/cleanup';
 import type { ClientMessage, ServerMessage, Room, ClientInfo, YouTubeVideo } from '@/types';
 import { scheduleSyncRedisToDb } from './queues/sync';
-import { elysiaYoutubeChecker } from './check-youtube-available';
 import { redis } from './redis';
 
 const serverLogger = createContextLogger('Server');
@@ -582,7 +581,6 @@ const app = new Elysia({
         serverLogger.info('Server stop initiated');
         await syncToMongoDB(redis);
     })
-    .use(elysiaYoutubeChecker)
     .listen(process.env.PORT || 8000);
 
 // Initialize cleanup jobs

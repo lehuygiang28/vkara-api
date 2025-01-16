@@ -14,5 +14,20 @@ services:
             - vkara_net
         restart: unless-stopped
 
+    redis_bundle2:
+        container_name: redis-bundle2
+        hostname: redis-bundle2
+        build:
+            context: ./
+            dockerfile: ./containers/redis-bundle/2.Dockerfile
+        image: lehuygiang28/vkara-api-redis-check-youtube-embed:${COMPOSE_TAG:-latest}
+        env_file:
+            - ./containers/redis-bundle/.env
+        ports:
+            - 8001:${PORT_2:-8001}
+        networks:
+            - vkara_net
+        restart: unless-stopped
+
 networks:
     vkara_net:

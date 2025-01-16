@@ -1,8 +1,13 @@
 import { Elysia, t } from 'elysia';
 import puppeteer, { Browser } from 'puppeteer';
+import locateChrome from 'locate-chrome';
+
 import { redis } from './redis';
 import { createContextLogger } from './utils/logger';
 
+const executablePath = (await new Promise((resolve) =>
+    locateChrome((arg: any) => resolve(arg)),
+)) as string;
 const logger = createContextLogger('check-youtube-available');
 let browser: Browser;
 
@@ -24,6 +29,14 @@ const initBrowser = async () => {
     if (!browser) {
         browser = await puppeteer.launch({
             headless: true,
+            executablePath: executablePath || '/usr/bin/google-chrome',
+
+            args: [
+                '--disable-gpu',
+                '--disable-dev-shm-usage',
+                '--disable-setuid-sandbox',
+                '--no-sandbox',
+            ],
         });
     }
 };
@@ -90,29 +103,32 @@ const checkEmbedStatus = async (videoId: string): Promise<boolean> => {
     }
 };
 
-export const elysiaYoutubeChecker = new Elysia().onStart(initBrowser).post(
-    '/check-embed',
-    async ({ body: { videoIds } }) => {
-        await initBrowser(); // Ensure browser is initialized
+export const elysiaYoutubeChecker = new Elysia()
+    .onStart(initBrowser)
+    .post(
+        '/check-embed',
+        async ({ body: { videoIds } }) => {
+            await initBrowser(); // Ensure browser is initialized
 
-        const results = await Promise.all(
-            videoIds.map(async (videoId: string) => {
-                const cachedStatus = await getCachedStatus(videoId);
-                if (cachedStatus !== null) {
-                    return { videoId, canEmbed: cachedStatus };
-                }
-                return {
-                    videoId,
-                    canEmbed: await checkEmbedStatus(videoId),
-                };
+            const results = await Promise.all(
+                videoIds.map(async (videoId: string) => {
+                    const cachedStatus = await getCachedStatus(videoId);
+                    if (cachedStatus !== null) {
+                        return { videoId, canEmbed: cachedStatus };
+                    }
+                    return {
+                        videoId,
+                        canEmbed: await checkEmbedStatus(videoId),
+                    };
+                }),
+            );
+
+            return results;
+        },
+        {
+            body: t.Object({
+                videoIds: t.Array(t.String()),
             }),
-        );
-
-        return results;
-    },
-    {
-        body: t.Object({
-            videoIds: t.Array(t.String()),
-        }),
-    },
-);
+        },
+    )
+    .listen(8001);
