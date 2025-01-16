@@ -233,11 +233,18 @@ async function playVideoNow(ws: ElysiaWS, video: YouTubeVideo) {
     const roomId = await validateClientInRoom(ws);
     const room = await validateRoom(roomId);
 
+    // Remove the video that would be played now from the queue and history
     room.historyQueue = room.historyQueue.filter((v) => v.id !== video.id);
     room.videoQueue = room.videoQueue.filter((v) => v.id !== video.id);
 
-    if (room.playingNow) {
-        room.historyQueue = [room.playingNow, ...room.historyQueue];
+    // Move the currently playing video to history
+    if (room.playingNow && room.playingNow.id) {
+        // If the video is not in history, add it to history
+        // If the video is in history, move it to the top
+        room.historyQueue = [
+            room.playingNow,
+            ...room.historyQueue?.filter((v) => v.id !== room.playingNow!.id),
+        ];
     }
 
     room.playingNow = video;
@@ -255,6 +262,9 @@ async function nextVideo(ws: ElysiaWS) {
     const roomId = await validateClientInRoom(ws);
     const room = await validateRoom(roomId);
 
+    // Move the currently playing video to history
+    // If the video is not in history, add it to history
+    // If the video is in history, move it to the top
     if (room.playingNow && room.playingNow.id) {
         room.historyQueue = [
             room.playingNow,
@@ -263,11 +273,13 @@ async function nextVideo(ws: ElysiaWS) {
     }
 
     if (room.videoQueue.length > 0) {
+        // If there are videos in the queue, play the next video
         const nextVideo = room.videoQueue.shift()!;
         room.playingNow = nextVideo;
         room.isPlaying = true;
         room.currentTime = 0;
     } else {
+        // If there are no videos in the queue, stop playing
         room.playingNow = null;
         room.isPlaying = false;
         room.currentTime = 0;
