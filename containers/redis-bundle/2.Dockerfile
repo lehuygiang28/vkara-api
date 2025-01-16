@@ -23,19 +23,19 @@ WORKDIR /app
 
 RUN mkdir -p /app && \
     chown pptruser:pptruser /app
-COPY --chown=pptruser:pptruser --from=build /app/server2 server
+COPY --from=build --chown=pptruser:pptruser  /app/server2 server
+
+COPY --from=build --chown=pptruser:pptruser /usr/bin/supervisord /usr/bin/supervisord
+COPY --from=build --chown=pptruser:pptruser /usr/bin/redis-server /usr/bin/redis-server
+
+RUN chmod +x /usr/bin/supervisord && \
+    chmod +x /usr/bin/redis-server
 RUN chmod +x /app/server && \
     chown pptruser:pptruser /app/server
 
 COPY --chown=pptruser:pptruser ./containers/redis-bundle/supervisord.conf ./supervisord.conf
 COPY --chown=pptruser:pptruser ./containers/redis-bundle/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
-
-COPY --chown=pptruser:pptruser /usr/bin/supervisord /usr/bin/supervisord
-COPY --chown=pptruser:pptruser /usr/bin/redis-server /usr/bin/redis-server
-
-RUN chmod +x /usr/bin/supervisord && \
-    chmod +x /usr/bin/redis-server
 
 RUN touch /app/supervisord.pid && \
     chown pptruser:pptruser /app/supervisord.pid && \
