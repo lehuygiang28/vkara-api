@@ -14,8 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgtk-3-dev li
 # Set the working directory
 RUN mkdir app
 WORKDIR /app
-COPY ./src ./
-COPY package.json bun.lockb tsconfig.json ./
+COPY ./src /app/src
+COPY package.json bun.lockb tsconfig.json /app/
 
 # Add user so we don't need --no-sandbox
 # same layer as npm install to keep re-chowned files from using up several hundred MBs more space

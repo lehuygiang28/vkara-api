@@ -8,6 +8,7 @@ COPY ./tsconfig.json ./tsconfig.json
 
 COPY ./src ./src
 
+RUN bun remove puppeteer
 RUN bun install
 
 ENV NODE_ENV=production
