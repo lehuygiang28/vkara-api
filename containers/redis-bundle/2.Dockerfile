@@ -14,9 +14,6 @@ ENV NODE_ENV=production
 
 RUN bun run build2
 
-RUN apk update && \
-    apk add --no-cache supervisor redis
-
 FROM ghcr.io/puppeteer/puppeteer:16.1.0 AS production
 
 WORKDIR /app
@@ -25,11 +22,13 @@ RUN mkdir -p /app && \
     chown pptruser:pptruser /app
 COPY --from=build --chown=pptruser:pptruser  /app/server2 server
 
-COPY --from=build --chown=pptruser:pptruser /usr/bin/supervisord /usr/bin/supervisord
-COPY --from=build --chown=pptruser:pptruser /usr/bin/redis-server /usr/bin/redis-server
+RUN apt-get update && \
+    apt-get install -y supervisor redis-server && \
+    chmod +x /usr/bin/supervisord && \
+    chmod +x /usr/bin/redis-server && \
+    chown pptruser:pptruser /usr/bin/supervisord && \
+    chown pptruser:pptruser /usr/bin/redis-server
 
-RUN chmod +x /usr/bin/supervisord && \
-    chmod +x /usr/bin/redis-server
 RUN chmod +x /app/server && \
     chown pptruser:pptruser /app/server
 
