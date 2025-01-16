@@ -14,39 +14,39 @@ ENV NODE_ENV=production
 
 RUN bun run build2
 
-FROM build AS production
+FROM ghcr.io/puppeteer/puppeteer:16.1.0 AS production
 
 WORKDIR /app
 
 RUN mkdir -p /app && \
-    chown nobody:nobody /app
-COPY --chown=nobody:nobody --from=build /app/server2 server
+    chown pptruser:pptruser /app
+COPY --chown=pptruser:pptruser --from=build /app/server2 server
 RUN chmod +x /app/server && \
-    chown nobody:nobody /app/server
+    chown pptruser:pptruser /app/server
 
 RUN apk update && \
     apk add --no-cache supervisor redis
 
-COPY --chown=nobody:nobody ./containers/redis-bundle/supervisord.conf ./supervisord.conf
-COPY --chown=nobody:nobody ./containers/redis-bundle/entrypoint.sh ./entrypoint.sh
+COPY --chown=pptruser:pptruser ./containers/redis-bundle/supervisord.conf ./supervisord.conf
+COPY --chown=pptruser:pptruser ./containers/redis-bundle/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
 RUN touch /app/supervisord.pid && \
-    chown nobody:nobody /app/supervisord.pid && \
+    chown pptruser:pptruser /app/supervisord.pid && \
     touch /app/supervisord.log && \
-    chown nobody:nobody /app/supervisord.log && \
+    chown pptruser:pptruser /app/supervisord.log && \
     chmod 755 /app/supervisord.conf && \ 
     chmod 644 /app/supervisord.log && \
     chmod 644 /app/supervisord.pid
 
 RUN mkdir -p ./log && \
-    chown nobody:nobody ./log
+    chown pptruser:pptruser ./log
 
-RUN chown nobody:nobody /app
+RUN chown pptruser:pptruser /app
 
 ENV NODE_ENV=production
 
-USER nobody
+USER pptruser
 
 ENTRYPOINT ["./entrypoint.sh"]
 
