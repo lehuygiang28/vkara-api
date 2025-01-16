@@ -18,6 +18,8 @@ FROM ghcr.io/puppeteer/puppeteer:16.1.0 AS production
 
 WORKDIR /app
 
+USER root
+
 RUN mkdir -p /app && \
     chown pptruser:pptruser /app
 COPY --from=build --chown=pptruser:pptruser  /app/server2 server
@@ -55,4 +57,4 @@ USER pptruser
 
 ENTRYPOINT ["./entrypoint.sh"]
 
-EXPOSE 8000
+EXPOSE 8001
