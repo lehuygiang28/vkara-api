@@ -44,7 +44,7 @@ USER pptruser
 
 # install packages
 RUN bun i
-RUN bun x puppeteer browsers install chrome
+RUN npx puppeteer browsers install chrome
 
 EXPOSE 8001
 
