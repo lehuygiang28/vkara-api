@@ -20,7 +20,7 @@ WORKDIR /app
 
 RUN mkdir -p /app && \
     chown nobody:nobody /app
-COPY --chown=nobody:nobody --from=build /app/server server2
+COPY --chown=nobody:nobody --from=build /app/server2 server
 RUN chmod +x /app/server && \
     chown nobody:nobody /app/server
 
