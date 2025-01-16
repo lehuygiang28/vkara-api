@@ -2,61 +2,56 @@ FROM oven/bun:alpine AS build
 
 WORKDIR /app
 
-COPY package.json package.json
-COPY bun.lockb bun.lockb
-COPY ./tsconfig.json ./tsconfig.json
-
+# Copy dependencies and source files
+COPY package.json bun.lockb tsconfig.json ./
 COPY ./src ./src
 
+# Install dependencies
 RUN bun install
 
 ENV NODE_ENV=production
 
+# Build the application
 RUN bun run build2
 
+# --- Production stage ---
 FROM ghcr.io/puppeteer/puppeteer:16.1.0 AS production
 
 WORKDIR /app
 
 USER root
 
-RUN mkdir -p /app && \
-    chown pptruser:pptruser /app
-COPY --from=build --chown=pptruser:pptruser  /app/server2 server
+# Prepare application directory
+RUN mkdir -p /app && chown pptruser:pptruser /app
 
-RUN  apt-get install lsb-release curl gpg && \
+# Copy built server files
+COPY --from=build --chown=pptruser:pptruser /app/server2 ./server
+
+# Install Redis
+RUN apt-get update && apt-get install -y lsb-release curl gpg && \
     curl -fsSL https://packages.redis.io/gpg | gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg && \
-    chmod 644 /usr/share/keyrings/redis-archive-keyring.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/redis.list && \
-    apt-get update && \
-    apt-get install redis
+    echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" > /etc/apt/sources.list.d/redis.list && \
+    apt-get update && apt-get install -y redis && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update && \
-    apt-get install -y supervisor && \
-    chmod +x /usr/bin/supervisord && \
-    chmod +x /usr/bin/redis-server && \
-    chown pptruser:pptruser /usr/bin/supervisord && \
-    chown pptruser:pptruser /usr/bin/redis-server
+# Install Supervisor
+RUN apt-get update && apt-get install -y supervisor && \
+    chmod +x /usr/bin/supervisord /usr/bin/redis-server && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN chmod +x /app/server && \
-    chown pptruser:pptruser /app/server
-
+# Prepare Supervisor configuration and scripts
 COPY --chown=pptruser:pptruser ./containers/redis-bundle/supervisord.conf ./supervisord.conf
 COPY --chown=pptruser:pptruser ./containers/redis-bundle/entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
 
-RUN touch /app/supervisord.pid && \
-    chown pptruser:pptruser /app/supervisord.pid && \
-    touch /app/supervisord.log && \
-    chown pptruser:pptruser /app/supervisord.log && \
-    chmod 755 /app/supervisord.conf && \ 
-    chmod 644 /app/supervisord.log && \
-    chmod 644 /app/supervisord.pid
+# Set permissions for scripts and log files
+RUN chmod +x ./entrypoint.sh && \
+    touch /app/supervisord.pid /app/supervisord.log && \
+    chown pptruser:pptruser /app/supervisord.pid /app/supervisord.log && \
+    chmod 644 /app/supervisord.conf /app/supervisord.log /app/supervisord.pid && \
+    mkdir -p ./log && chown pptruser:pptruser ./log
 
-RUN mkdir -p ./log && \
-    chown pptruser:pptruser ./log
-
-RUN chown pptruser:pptruser /app
+# Set application permissions
+RUN chmod +x /app/server && chown pptruser:pptruser /app
 
 ENV NODE_ENV=production
 
