@@ -29,7 +29,14 @@ const initBrowser = async () => {
     if (!browser) {
         browser = await puppeteer.launch({
             headless: true,
-            executablePath,
+            executablePath: executablePath || '/usr/bin/google-chrome',
+
+            args: [
+                '--disable-gpu',
+                '--disable-dev-shm-usage',
+                '--disable-setuid-sandbox',
+                '--no-sandbox',
+            ],
         });
     }
 };
