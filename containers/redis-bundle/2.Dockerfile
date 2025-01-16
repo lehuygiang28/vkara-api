@@ -1,4 +1,4 @@
-FROM oven/bun
+FROM node:22
 
 ARG REFRESH=3
 
@@ -39,12 +39,13 @@ RUN touch /app/supervisord.pid && \
 RUN mkdir -p ./log && \
     chown pptruser:pptruser ./log
 
-# Run everything after as non-privileged user.
-USER pptruser
-
 # install packages
+RUN npm install -g bun
 RUN bun i
 RUN npx puppeteer browsers install chrome
+
+# Run everything after as non-privileged user.
+USER pptruser
 
 EXPOSE 8001
 
