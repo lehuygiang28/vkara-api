@@ -26,11 +26,11 @@ const CACHE_PREFIX = 'youtube_embed_status:';
 const CACHE_EXPIRATION = 15 * 24 * 60 * 60; // 15 days in seconds
 
 const initBrowser = async () => {
+    logger.info('Initializing browser');
     if (!browser) {
         browser = await puppeteer.launch({
             headless: true,
             executablePath: executablePath || '/usr/bin/google-chrome',
-
             args: [
                 '--disable-gpu',
                 '--disable-dev-shm-usage',
@@ -38,31 +38,44 @@ const initBrowser = async () => {
                 '--no-sandbox',
             ],
         });
+        logger.info('Browser initialized successfully');
+    } else {
+        logger.info('Browser already initialized');
     }
 };
 
 const getCachedStatus = async (videoId: string): Promise<boolean | null> => {
     const cachedStatus = await redis.get(`${CACHE_PREFIX}${videoId}`);
-    return cachedStatus ? cachedStatus === 'true' : null;
+    if (cachedStatus !== null) {
+        return cachedStatus === 'true';
+    }
+    return null;
 };
 
 const setCachedStatus = async (videoId: string, canEmbed: boolean): Promise<void> => {
+    logger.info(`Setting cache for video ${videoId}: ${canEmbed}`);
     await redis.set(`${CACHE_PREFIX}${videoId}`, canEmbed.toString(), 'EX', CACHE_EXPIRATION);
+    logger.info(`Cache set successfully for video ${videoId}`);
 };
 
 const checkEmbedStatus = async (videoId: string): Promise<boolean> => {
+    logger.info(`Checking embed status for video ${videoId}`);
+
     // Check cache first
     const cachedStatus = await getCachedStatus(videoId);
     if (cachedStatus !== null) {
+        logger.info(`HIT: ${videoId}`);
         return cachedStatus;
     }
 
+    logger.info(`MISS: ${videoId}`);
     const page = await browser.newPage();
     await page.setRequestInterception(true);
     page.on('request', (request) => {
         const url = request.url();
         const isBlocked = blockedDomains.some((domain) => url.includes(domain));
         if (isBlocked) {
+            logger.debug(`Request blocked: ${url}`);
             request.abort();
         } else {
             request.continue();
@@ -91,6 +104,8 @@ const checkEmbedStatus = async (videoId: string): Promise<boolean> => {
             () => !document.body.innerHTML.includes('Video unavailable'),
         );
 
+        logger.info(`Result ${videoId}: ${canEmbed}`);
+
         // Cache the result
         await setCachedStatus(videoId, canEmbed);
 
@@ -99,30 +114,35 @@ const checkEmbedStatus = async (videoId: string): Promise<boolean> => {
         logger.error(`Error checking video ${videoId}:`, { error });
         return false;
     } finally {
+        logger.info(`Closing page for video ${videoId}`);
         await page.close();
     }
 };
 
 export const elysiaYoutubeChecker = new Elysia()
-    .onStart(initBrowser)
+    .onStart(() => {
+        logger.info('Starting Elysia YouTube Checker');
+        return initBrowser();
+    })
     .post(
         '/check-embed',
         async ({ body: { videoIds } }) => {
+            logger.info(`Received request to check ${videoIds.length} videos`);
             await initBrowser(); // Ensure browser is initialized
 
             const results = await Promise.all(
                 videoIds.map(async (videoId: string) => {
                     const cachedStatus = await getCachedStatus(videoId);
                     if (cachedStatus !== null) {
+                        logger.info(`HIT: ${videoId}`);
                         return { videoId, canEmbed: cachedStatus };
                     }
-                    return {
-                        videoId,
-                        canEmbed: await checkEmbedStatus(videoId),
-                    };
+                    const status = await checkEmbedStatus(videoId);
+                    return { videoId, canEmbed: status };
                 }),
             );
 
+            logger.info(`Finished processing ${videoIds.length} videos`);
             return results;
         },
         {
