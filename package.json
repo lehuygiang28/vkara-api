@@ -3,6 +3,7 @@
     "version": "0.0.1",
     "scripts": {
         "dev": "bun run --watch src/index.ts",
+        "c": "bun run --watch src/check-youtube-available.ts",
         "b": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server ./src/index.ts"
     },
     "dependencies": {
@@ -11,6 +12,7 @@
         "elysia": "^1.2.10",
         "ioredis": "^5.4.2",
         "mongoose": "^8.9.5",
+        "puppeteer": "^24.1.0",
         "winston": "^3.17.0"
     },
     "devDependencies": {

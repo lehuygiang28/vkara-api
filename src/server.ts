@@ -10,11 +10,12 @@ import { ErrorCode, RoomError } from '@/errors';
 import { scheduleCleanupJobs } from '@/queues/cleanup';
 import type { ClientMessage, ServerMessage, Room, ClientInfo, YouTubeVideo } from '@/types';
 import { scheduleSyncRedisToDb } from './queues/sync';
+import { elysiaYoutubeChecker } from './check-youtube-available';
 
 const serverLogger = createContextLogger('Server');
 const IS_ENCRYPTED_PASSWORD = process.env.IS_ENCRYPTED_PASSWORD === 'true';
 
-const redis = new Redis({
+export const redis = new Redis({
     host: process.env.REDIS_HOST || 'localhost',
     port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT) : 6379,
     password: process.env.REDIS_PASSWORD,
@@ -587,6 +588,7 @@ const app = new Elysia({
         serverLogger.info('Server stop initiated');
         await syncToMongoDB(redis);
     })
+    .use(elysiaYoutubeChecker)
     .listen(process.env.PORT || 8000);
 
 // Initialize cleanup jobs
