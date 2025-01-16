@@ -1,75 +1,34 @@
-FROM oven/bun:alpine AS build
+FROM oven/bun
 
+ARG REFRESH=3
+
+# install curl for healthchecks
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Installing required chrome dependencies manually
+# goto https://github.com/puppeteer/puppeteer/blob/main/docs/troubleshooting.md#running-puppeteer-on-wsl-windows-subsystem-for-linux
+RUN apt-get update && apt-get install -y libgtk-3-dev libnotify-dev libgconf-2-4 libnss3 libxss1 libasound2
+
+# Set the working directory
+RUN mkdir app
 WORKDIR /app
-
-# Copy dependencies and source files
+COPY ./src ./
 COPY package.json bun.lockb tsconfig.json ./
-COPY ./src ./src
 
-# Install dependencies
-RUN bun install
+# Add user so we don't need --no-sandbox
+# same layer as npm install to keep re-chowned files from using up several hundred MBs more space
+RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
+    && mkdir -p /home/pptruser/Downloads \
+    && chown -R pptruser:pptruser /home/pptruser \
+    && chown -R pptruser:pptruser /app
 
-ENV NODE_ENV=production
-
-# Build the application
-RUN bun run build2
-
-# --- Production stage ---
-FROM ghcr.io/puppeteer/puppeteer:16.1.0 AS production
-
-WORKDIR /app
-
-USER root
-
-# Prepare application directory
-RUN mkdir -p /app && chown pptruser:pptruser /app
-
-# Copy built server files
-COPY --from=build --chown=pptruser:pptruser /app/server2 ./server
-
-# Clean up old Google Chrome configurations
-RUN rm -f /etc/apt/sources.list.d/google-chrome.list
-
-# Add Google Chrome repository
-RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] https://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
-
-# Install Redis
-RUN apt-get update && apt-get install -y lsb-release curl gpg && \
-    curl -fsSL https://packages.redis.io/gpg | gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" > /etc/apt/sources.list.d/redis.list && \
-    apt-get update && apt-get install -y redis && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Install Supervisor
-RUN apt-get update && apt-get install -y supervisor && \
-    chmod +x /usr/bin/supervisord /usr/bin/redis-server && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Prepare Supervisor configuration and scripts
-COPY --chown=pptruser:pptruser ./containers/redis-bundle/supervisord.conf ./supervisord.conf
-COPY --chown=pptruser:pptruser ./containers/redis-bundle/entrypoint.sh ./entrypoint.sh
-
-# Set permissions for scripts and log files
-RUN chmod +x ./entrypoint.sh && \
-    touch /app/supervisord.pid /app/supervisord.log && \
-    chown pptruser:pptruser /app/supervisord.pid /app/supervisord.log && \
-    chmod 644 /app/supervisord.conf /app/supervisord.log /app/supervisord.pid && \
-    mkdir -p ./log && chown pptruser:pptruser ./log
-
-# Set application permissions
-RUN chmod +x /app/server && \
-    chown pptruser:pptruser /app && \
-    chown pptruser:pptruser /home/pptruser && \
-    mkdir -p /home/pptruser/Downloads && \
-    chown pptruser:pptruser /home/pptruser/Downloads
-
-RUN bun x puppeteer browsers install chrome
-
-ENV NODE_ENV=production
-
+# Run everything after as non-privileged user.
 USER pptruser
 
-ENTRYPOINT ["./entrypoint.sh"]
+# install packages
+RUN bun i
+RUN bun x puppeteer browsers install chrome
 
-EXPOSE 8001
+EXPOSE 4010
+
+CMD ["bun", "run", "dev2"]
