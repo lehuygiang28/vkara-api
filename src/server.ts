@@ -1,6 +1,5 @@
 import { Elysia, t } from 'elysia';
 import { ElysiaWS } from 'elysia/dist/ws';
-import { Redis } from 'ioredis';
 import * as mongoose from 'mongoose';
 
 import { syncFromMongoDB, syncToMongoDB } from '@/mongodb-sync';
@@ -11,15 +10,10 @@ import { scheduleCleanupJobs } from '@/queues/cleanup';
 import type { ClientMessage, ServerMessage, Room, ClientInfo, YouTubeVideo } from '@/types';
 import { scheduleSyncRedisToDb } from './queues/sync';
 import { elysiaYoutubeChecker } from './check-youtube-available';
+import { redis } from './redis';
 
 const serverLogger = createContextLogger('Server');
 const IS_ENCRYPTED_PASSWORD = process.env.IS_ENCRYPTED_PASSWORD === 'true';
-
-export const redis = new Redis({
-    host: process.env.REDIS_HOST || 'localhost',
-    port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT) : 6379,
-    password: process.env.REDIS_PASSWORD,
-});
 
 if (process.env.MONGODB_URI) {
     mongoose

@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia';
 import puppeteer, { Browser } from 'puppeteer';
-import { redis } from './server';
+import { redis } from './redis';
 import { createContextLogger } from './utils/logger';
 
 const logger = createContextLogger('check-youtube-available');
