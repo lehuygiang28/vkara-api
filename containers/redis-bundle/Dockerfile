@@ -20,8 +20,9 @@ RUN bun build \
     --outfile server \
     ./src/index.ts
 
-FROM build AS production
+FROM node:22 AS production
 
+USER root
 WORKDIR /app
 
 RUN mkdir -p /app && \
@@ -49,7 +50,8 @@ RUN mkdir -p ./log && \
     chown nobody:nobody ./log
 
 RUN chown nobody:nobody /app
-RUN bun x --bun puppeteer browsers install firefox --platform=linux --install-deps
+RUN npm i -g bun
+RUN npx puppeteer browsers install chrome --platform=linux --install-deps
 
 ENV NODE_ENV=production
 
