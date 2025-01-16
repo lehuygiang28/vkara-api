@@ -20,13 +20,9 @@ RUN bun build \
     --outfile server \
     ./src/index.ts
 
-FROM ghcr.io/puppeteer/puppeteer:16.1.0 AS production
+FROM build AS production
 
 WORKDIR /app
-
-USER root
-
-RUN npm install -g bun
 
 RUN mkdir -p /app && \
     chown nobody:nobody /app
@@ -53,6 +49,7 @@ RUN mkdir -p ./log && \
     chown nobody:nobody ./log
 
 RUN chown nobody:nobody /app
+RUN bun x --bun puppeteer browsers install chrome --install-deps
 
 ENV NODE_ENV=production
 
