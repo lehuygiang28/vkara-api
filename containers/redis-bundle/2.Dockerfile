@@ -27,6 +27,10 @@ RUN mkdir -p /app && chown pptruser:pptruser /app
 # Copy built server files
 COPY --from=build --chown=pptruser:pptruser /app/server2 ./server
 
+# Fix GPG error for Google Chrome repository
+RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] https://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
+
 # Install Redis
 RUN apt-get update && apt-get install -y lsb-release curl gpg && \
     curl -fsSL https://packages.redis.io/gpg | gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg && \
