@@ -24,6 +24,13 @@ RUN mkdir -p /app && \
     chown pptruser:pptruser /app
 COPY --from=build --chown=pptruser:pptruser  /app/server2 server
 
+RUN  apt-get install lsb-release curl gpg && \
+    curl -fsSL https://packages.redis.io/gpg | gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg && \
+    chmod 644 /usr/share/keyrings/redis-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/redis.list && \
+    apt-get update && \
+    apt-get install redis
+
 RUN apt-get update && \
     apt-get install -y supervisor redis-server && \
     chmod +x /usr/bin/supervisord && \
