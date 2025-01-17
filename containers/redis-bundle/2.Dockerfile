@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgtk-3-dev li
 RUN mkdir app
 WORKDIR /app
 COPY ./src /app/src
+COPY ./bin /app/bin
 COPY package.json bun.lockb tsconfig.json /app/
 
 # Add user so we don't need --no-sandbox

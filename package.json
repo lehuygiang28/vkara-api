@@ -2,10 +2,12 @@
     "name": "vkara-api",
     "version": "0.0.1",
     "scripts": {
-        "dev": "bun run --watch src/index.ts",
-        "dev2": "bun run --watch src/check-youtube-available.ts",
-        "build": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server ./src/index.ts",
-        "build2": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server2 ./src/check-youtube-available.ts"
+        "dev": "bun run --watch bin/ws.ts",
+        "dev2": "bun run --watch bin/check-youtube.ts",
+        "dev-aio": "bun run --watch bin/aio.ts",
+        "build": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server ./bin/ws.ts",
+        "build2": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server2 ./bin/check-youtube.ts",
+        "build-aio": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile aio ./bin/aio.ts"
     },
     "dependencies": {
         "bullmq": "^5.34.8",

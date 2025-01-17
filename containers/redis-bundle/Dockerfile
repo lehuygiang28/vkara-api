@@ -7,19 +7,14 @@ COPY bun.lockb bun.lockb
 COPY ./tsconfig.json ./tsconfig.json
 
 COPY ./src ./src
+COPY ./bin ./bin
 
 RUN bun remove puppeteer
 RUN bun install
 
 ENV NODE_ENV=production
 
-RUN bun build \
-    --compile \
-    --minify-whitespace \
-    --minify-syntax \
-    --target bun \
-    --outfile server \
-    ./src/index.ts
+RUN bun run build
 
 FROM build AS production
 

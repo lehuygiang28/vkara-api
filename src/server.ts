@@ -431,7 +431,7 @@ async function removeVideoFromQueue(ws: ElysiaWS, videoId: string) {
 
 // Broadcasting utilities
 async function broadcastToRoom(roomId: string, message: ServerMessage): Promise<void> {
-    app.server?.publish(roomId, JSON.stringify(message));
+    wsServer.server?.publish(roomId, JSON.stringify(message));
 }
 
 async function sendRoomUpdate(ws: ElysiaWS, roomId: string) {
@@ -546,8 +546,7 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
     }
 }
 
-// Initialize app
-const app = new Elysia({
+export const wsServer = new Elysia({
     websocket: {
         idleTimeout: 960,
     },
@@ -580,8 +579,10 @@ const app = new Elysia({
     .on('stop', async () => {
         serverLogger.info('Server stop initiated');
         await syncToMongoDB(redis);
-    })
-    .listen(process.env.PORT || 8000);
+        await redis.quit();
+        await mongoose.disconnect();
+        await wsServer.stop();
+    });
 
 // Initialize cleanup jobs
 scheduleCleanupJobs().catch(serverLogger.error);
@@ -591,7 +592,5 @@ process.on('beforeExit', async () => {
     await syncToMongoDB(redis);
     await redis.quit();
     await mongoose.disconnect();
-    await app.stop();
+    await wsServer.stop();
 });
-
-export type ElysiaApp = typeof app;

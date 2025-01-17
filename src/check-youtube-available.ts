@@ -150,5 +150,4 @@ export const elysiaYoutubeChecker = new Elysia()
                 videoIds: t.Array(t.String()),
             }),
         },
-    )
-    .listen(8001);
+    );

@@ -24,7 +24,7 @@ services:
         env_file:
             - ./containers/redis-bundle/.env
         ports:
-            - 8001:${PORT_2:-8001}
+            - 8001:${CHECK_YOUTUBE_PORT:-8001}
         networks:
             - vkara_net
         restart: unless-stopped
