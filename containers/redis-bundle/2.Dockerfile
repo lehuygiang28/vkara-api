@@ -1,5 +1,9 @@
 FROM node:22
 
+LABEL git="https://github.com/lehuygiang28/vkara-api"
+LABEL author="lehuygiang28 <lehuygiang28@gmail.com>"
+LABEL org.opencontainers.image.maintainer="lehuygiang28 <lehuygiang28@gmail.com>"
+
 # We don't need the standalone Chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
 
