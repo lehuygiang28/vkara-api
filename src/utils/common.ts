@@ -1,5 +1,5 @@
 import { Video } from 'youtube-sr';
-import { YouTubeVideo } from '@/types';
+import { Room, YouTubeVideo } from '@/types';
 
 /**
  * Generates a random number with a specified number of digits.
@@ -105,4 +105,9 @@ export function cleanUpVideoField(video: Video): YouTubeVideo {
             url: videoJSON.thumbnail.url || '',
         },
     };
+}
+
+export function cleanUpRoomField(room: Room): Omit<Room, 'clients'> {
+    const { clients, ...cleanedRoom } = room;
+    return cleanedRoom;
 }
