@@ -101,7 +101,10 @@ const checkEmbedStatus = async (videoId: string): Promise<boolean> => {
         }
 
         const canEmbed = await page.evaluate(
-            () => !document.body.innerHTML.includes('Video unavailable'),
+            () =>
+                !document.body.innerHTML.includes(
+                    'Playback on other websites has been disabled by the video owner',
+                ),
         );
 
         logger.info(`Result ${videoId}: ${canEmbed}`);
