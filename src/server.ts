@@ -201,7 +201,7 @@ async function closeRoom(roomId: string) {
 }
 
 // Video operations
-async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
+async function addVideo(ws: ElysiaWS, video: YouTubeVideo, willBroadcastToRoom = true) {
     const roomId = await validateClientInRoom(ws);
     const room = await validateRoom(roomId);
 
@@ -220,7 +220,9 @@ async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
 
     await Promise.all([
         redis.set(`room:${roomId}`, JSON.stringify(room)),
-        broadcastToRoom(roomId, { type: 'roomUpdate', room: cleanUpRoomField(room) }),
+        willBroadcastToRoom
+            ? broadcastToRoom(roomId, { type: 'roomUpdate', room: cleanUpRoomField(room) })
+            : Promise.resolve(),
     ]);
 }
 
@@ -539,6 +541,11 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
                 await removeVideoFromQueue(ws, message.videoId);
                 break;
 
+            case 'addVideoAndMoveToTop':
+                await addVideo(ws, message.video, false);
+                await moveVideoToTop(ws, message.video.id);
+                break;
+
             default:
                 throw new RoomError(ErrorCode.INVALID_MESSAGE);
         }
@@ -584,8 +591,7 @@ export const wsServer = new Elysia({
             wsConnections.delete(ws.id);
         },
         message: (ws, message: ClientMessage) => handleMessage(ws, message),
-    })
-    .use(searchYoutubeiElysia);
+    });
 
 process.on('beforeExit', async () => {
     serverLogger.info('Server stopping');

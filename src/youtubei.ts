@@ -236,3 +236,5 @@ const mapYoutubeiVideo = (video: VideoCompact): YouTubeVideo => ({
         verified: false,
     },
 });
+
+export type SearchYoutubeiApp = typeof searchYoutubeiElysia;

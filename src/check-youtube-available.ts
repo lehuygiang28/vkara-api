@@ -154,3 +154,5 @@ export const elysiaYoutubeChecker = new Elysia()
             }),
         },
     );
+
+export type CheckYoutubeApp = typeof elysiaYoutubeChecker;

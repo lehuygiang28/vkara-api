@@ -80,6 +80,7 @@ export type ClientMessage = MessageBase &
         | { type: 'shuffleQueue' }
         | { type: 'clearQueue' }
         | { type: 'clearHistory' }
+        | { type: 'addVideoAndMoveToTop'; video: YouTubeVideo }
     );
 
 export type ServerMessage =
