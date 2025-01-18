@@ -10,6 +10,9 @@
         "build-aio": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile aio ./bin/aio.ts"
     },
     "dependencies": {
+        "@elysiajs/cors": "^1.2.0",
+        "@elysiajs/server-timing": "^1.2.0",
+        "@elysiajs/swagger": "^1.2.0",
         "bullmq": "^5.34.8",
         "chalk": "^5.4.1",
         "elysia": "^1.2.10",
