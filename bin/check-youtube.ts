@@ -2,5 +2,9 @@ import '@/check-youtube-available';
 
 import { elysiaYoutubeChecker } from '@/check-youtube-available';
 import cors from '@elysiajs/cors';
+import swagger from '@elysiajs/swagger';
 
-elysiaYoutubeChecker.use(cors()).listen(process.env.CHECK_YOUTUBE_PORT || 8001);
+elysiaYoutubeChecker
+    .use(cors())
+    .use(swagger())
+    .listen(process.env.CHECK_YOUTUBE_PORT || 8001);
