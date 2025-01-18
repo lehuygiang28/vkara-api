@@ -10,6 +10,7 @@ import { scheduleCleanupJobs } from '@/queues/cleanup';
 import type { ClientMessage, ServerMessage, Room, ClientInfo, YouTubeVideo } from '@/types';
 import { scheduleSyncRedisToDb } from './queues/sync';
 import { redis } from './redis';
+import { searchYoutubeiElysia } from './search-youtubei';
 
 const serverLogger = createContextLogger('Server');
 const IS_ENCRYPTED_PASSWORD = process.env.IS_ENCRYPTED_PASSWORD === 'true';
@@ -551,6 +552,19 @@ export const wsServer = new Elysia({
         idleTimeout: 960,
     },
 })
+    .on('start', async () => {
+        serverLogger.info('Server started');
+        // Sync data from MongoDB to Redis on startup
+        await syncFromMongoDB(redis);
+        scheduleCleanupJobs().catch(serverLogger.error);
+    })
+    .on('stop', async () => {
+        serverLogger.info('Server stop initiated');
+        await syncToMongoDB(redis);
+        await redis.quit();
+        await mongoose.disconnect();
+        await wsServer.stop();
+    })
     .state('wsConnections', wsConnections)
     .ws('/ws', {
         schema: {
@@ -571,21 +585,7 @@ export const wsServer = new Elysia({
         },
         message: (ws, message: ClientMessage) => handleMessage(ws, message),
     })
-    .on('start', async () => {
-        serverLogger.info('Server started');
-        // Sync data from MongoDB to Redis on startup
-        await syncFromMongoDB(redis);
-    })
-    .on('stop', async () => {
-        serverLogger.info('Server stop initiated');
-        await syncToMongoDB(redis);
-        await redis.quit();
-        await mongoose.disconnect();
-        await wsServer.stop();
-    });
-
-// Initialize cleanup jobs
-scheduleCleanupJobs().catch(serverLogger.error);
+    .use(searchYoutubeiElysia);
 
 process.on('beforeExit', async () => {
     serverLogger.info('Server stopping');

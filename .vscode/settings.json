@@ -1,4 +1,13 @@
 {
     "biome.enabled": false,
-    "cSpell.words": ["DOCKERHUB", "Elysia", "hdel", "hgetall", "hset", "supervisord", "vkara"]
+    "cSpell.words": [
+        "DOCKERHUB",
+        "Elysia",
+        "hdel",
+        "hgetall",
+        "hset",
+        "supervisord",
+        "vkara",
+        "Youtubei"
+    ]
 }
