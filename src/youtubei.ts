@@ -194,7 +194,7 @@ export const searchYoutubeiElysia = new Elysia({})
         },
     )
     .post(
-        '/suggestion',
+        '/suggestions',
         async ({ body: { query } }): Promise<string[]> => {
             try {
                 const suggestions = await youtube.getSuggestions(query);
