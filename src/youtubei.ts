@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { Redis } from 'ioredis';
 import { Queue, Worker } from 'bullmq';
 import { Client, VideoCompact, SearchResult } from 'youtubei';
+import youtube from 'youtube-sr';
 
 import { createContextLogger } from '@/utils/logger';
 import { YouTubeVideo } from './types';
@@ -189,6 +190,23 @@ export const searchYoutubeiElysia = new Elysia({})
             body: t.Object({
                 query: t.String(),
                 continuation: t.Optional(t.String()),
+            }),
+        },
+    )
+    .post(
+        '/suggestion',
+        async ({ body: { query } }): Promise<string[]> => {
+            try {
+                const suggestions = await youtube.getSuggestions(query);
+                return suggestions;
+            } catch (error) {
+                logger.error('Failed to get suggestions', { error });
+                return [];
+            }
+        },
+        {
+            body: t.Object({
+                query: t.String(),
             }),
         },
     );

@@ -10,7 +10,7 @@ import { scheduleCleanupJobs } from '@/queues/cleanup';
 import type { ClientMessage, ServerMessage, Room, ClientInfo, YouTubeVideo } from '@/types';
 import { scheduleSyncRedisToDb } from './queues/sync';
 import { redis } from './redis';
-import { searchYoutubeiElysia } from './search-youtubei';
+import { searchYoutubeiElysia } from './youtubei';
 
 const serverLogger = createContextLogger('Server');
 const IS_ENCRYPTED_PASSWORD = process.env.IS_ENCRYPTED_PASSWORD === 'true';
