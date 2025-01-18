@@ -109,6 +109,7 @@ export const searchYoutubeiElysia = new Elysia({})
         }) => {
             let results: SearchResult<'video'> | undefined;
             let newItems: VideoCompact[] = [];
+            const processedVideoIds = new Set<string>();
 
             if (
                 continuation &&
@@ -139,7 +140,11 @@ export const searchYoutubeiElysia = new Elysia({})
                 if (results) {
                     const currentLength = results.items.length;
                     await results.next();
-                    newItems = results.items.slice(currentLength);
+                    const allNewItems = results.items.slice(currentLength);
+
+                    // Filter out duplicate videos
+                    newItems = allNewItems.filter((item) => !processedVideoIds.has(item.id));
+                    newItems.forEach((item) => processedVideoIds.add(item.id));
 
                     if (results.continuation) {
                         searchInstances.delete(continuation);
@@ -162,7 +167,10 @@ export const searchYoutubeiElysia = new Elysia({})
                     type: 'video',
                     sortBy: 'relevance',
                 });
-                newItems = results.items;
+
+                // Filter out duplicate videos
+                newItems = results.items.filter((item) => !processedVideoIds.has(item.id));
+                newItems.forEach((item) => processedVideoIds.add(item.id));
             }
 
             if (results?.continuation) {
