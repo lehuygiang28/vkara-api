@@ -201,7 +201,7 @@ async function closeRoom(roomId: string) {
 }
 
 // Video operations
-async function addVideo(ws: ElysiaWS, video: YouTubeVideo, willBroadcastToRoom = true) {
+async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
     const roomId = await validateClientInRoom(ws);
     const room = await validateRoom(roomId);
 
@@ -220,9 +220,7 @@ async function addVideo(ws: ElysiaWS, video: YouTubeVideo, willBroadcastToRoom =
 
     await Promise.all([
         redis.set(`room:${roomId}`, JSON.stringify(room)),
-        willBroadcastToRoom
-            ? broadcastToRoom(roomId, { type: 'roomUpdate', room: cleanUpRoomField(room) })
-            : Promise.resolve(),
+        broadcastToRoom(roomId, { type: 'roomUpdate', room: cleanUpRoomField(room) }),
     ]);
 }
 
@@ -432,6 +430,27 @@ async function removeVideoFromQueue(ws: ElysiaWS, videoId: string) {
     ]);
 }
 
+async function addVideoAndMoveToTop(ws: ElysiaWS, video: YouTubeVideo) {
+    const roomId = await validateClientInRoom(ws);
+    const room = await validateRoom(roomId);
+
+    room.videoQueue = room.videoQueue.filter((v) => v.id !== video.id);
+
+    if (!room?.playingNow && room?.videoQueue?.length <= 0) {
+        room.playingNow = video;
+        room.isPlaying = true;
+        room.currentTime = 0;
+    } else {
+        room.videoQueue = [...room.videoQueue, video];
+    }
+    room.lastActivity = Date.now();
+
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'roomUpdate', room: cleanUpRoomField(room) }),
+    ]);
+}
+
 // Broadcasting utilities
 async function broadcastToRoom(roomId: string, message: ServerMessage): Promise<void> {
     wsServer.server?.publish(roomId, JSON.stringify(message));
@@ -542,8 +561,7 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
                 break;
 
             case 'addVideoAndMoveToTop':
-                await addVideo(ws, message.video, false);
-                await moveVideoToTop(ws, message.video.id);
+                await addVideoAndMoveToTop(ws, message.video);
                 break;
 
             default:
