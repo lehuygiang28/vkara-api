@@ -219,6 +219,10 @@ async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
         throw new RoomError(ErrorCode.ALREADY_IN_QUEUE);
     }
 
+    if (!(await checkEmbeddable(video.id))) {
+        throw new RoomError(ErrorCode.VIDEO_NOT_EMBEDDABLE, 'Video is not embeddable');
+    }
+
     if (!room?.playingNow && room?.videoQueue?.length <= 0) {
         room.playingNow = video;
         room.isPlaying = true;
@@ -237,6 +241,10 @@ async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
 async function playVideoNow(ws: ElysiaWS, video: YouTubeVideo) {
     const roomId = await validateClientInRoom(ws);
     const room = await validateRoom(roomId);
+
+    if (!(await checkEmbeddable(video.id))) {
+        throw new RoomError(ErrorCode.VIDEO_NOT_EMBEDDABLE, 'Video is not embeddable');
+    }
 
     // Remove the video that would be played now from the queue and history
     room.historyQueue = room.historyQueue.filter((v) => v.id !== video.id);
@@ -443,6 +451,10 @@ async function removeVideoFromQueue(ws: ElysiaWS, videoId: string) {
 async function addVideoAndMoveToTop(ws: ElysiaWS, video: YouTubeVideo) {
     const roomId = await validateClientInRoom(ws);
     const room = await validateRoom(roomId);
+
+    if (!(await checkEmbeddable(video.id))) {
+        throw new RoomError(ErrorCode.VIDEO_NOT_EMBEDDABLE, 'Video is not embeddable');
+    }
 
     room.videoQueue = room.videoQueue.filter((v) => v.id !== video.id);
 

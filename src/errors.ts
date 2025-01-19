@@ -8,6 +8,7 @@ export enum ErrorCode {
     NOT_CREATOR_OF_ROOM = 'notCreatorOfRoom',
     ALREADY_IN_QUEUE = 'alreadyInQueue',
     VIDEO_NOT_FOUND = 'videoNotFound',
+    VIDEO_NOT_EMBEDDABLE = 'videoNotEmbeddable',
 }
 
 export interface ErrorResponse {
@@ -34,6 +35,7 @@ function getDefaultErrorMessage(code: ErrorCode): string {
         [ErrorCode.NOT_CREATOR_OF_ROOM]: 'Only the room creator can perform this action',
         [ErrorCode.ALREADY_IN_QUEUE]: 'Video is already in queue',
         [ErrorCode.VIDEO_NOT_FOUND]: 'Video not found',
+        [ErrorCode.VIDEO_NOT_EMBEDDABLE]: 'Video cannot be embedded',
     };
     return messages[code];
 }
