@@ -443,7 +443,7 @@ async function addVideoAndMoveToTop(ws: ElysiaWS, video: YouTubeVideo) {
         room.isPlaying = true;
         room.currentTime = 0;
     } else {
-        room.videoQueue = [...room.videoQueue, video];
+        room.videoQueue = [video, ...room.videoQueue];
     }
     room.lastActivity = Date.now();
 
