@@ -1,6 +1,7 @@
 import { Redis } from 'ioredis';
 import { Queue, Worker } from 'bullmq';
 
+import { closeRoom } from '@/server';
 import type { Room } from '@/types';
 import { createContextLogger } from '@/utils/logger';
 
@@ -72,39 +73,12 @@ async function cleanupInactiveRooms() {
                 clientCount: room.clients.length,
             });
 
-            // Get client IDs for cleanup
-            const clientIds = room.clients;
-
-            // Notify connected clients before removing the room
-            // We'll use a pub/sub channel to notify the main server
-            await connection.publish(
-                'room-notifications',
-                JSON.stringify({
-                    type: 'room-closed',
-                    roomId: room.id,
-                    clientIds,
-                    reason: 'Room has been closed due to inactivity',
-                }),
-            );
-
-            // Clean up client mappings
-            for (const clientId of clientIds) {
-                await connection.hdel(`client:${clientId}`, 'roomId');
-            }
-
-            // Delete the room
-            await connection.del(key);
-            logger.info(`Room ${room.id} has been removed due to inactivity`, {
-                roomId: room.id,
-                inactiveDuration: now - room.lastActivity,
-            });
+            await closeRoom(room.id, 'Room has been closed due to inactivity');
         }
     }
-
-    logger.info('Cleanup check completed');
 }
 
-// Add recurring cleanup job (every 5 minutes)
+// Add recurring cleanup job (every 10 minutes)
 export async function scheduleCleanupJobs() {
     try {
         await cleanupQueue.add(
@@ -112,7 +86,7 @@ export async function scheduleCleanupJobs() {
             {},
             {
                 repeat: {
-                    pattern: '*/5 * * * *', // Every 5 minutes
+                    pattern: '*/10 * * * *', // Every 10 minutes
                 },
             },
         );

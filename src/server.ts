@@ -182,7 +182,7 @@ async function handleCloseRoom(ws: ElysiaWS) {
     await closeRoom(roomId);
 }
 
-async function closeRoom(roomId: string) {
+export async function closeRoom(roomId: string, reason = 'Room closed by creator') {
     const room = await validateRoom(roomId);
 
     for (const clientId of room.clients) {
@@ -191,13 +191,15 @@ async function closeRoom(roomId: string) {
             ws.unsubscribe(roomId);
             sendToClient(ws, {
                 type: 'roomClosed',
-                reason: 'Room closed by creator',
+                reason,
             });
         }
-        await redis.hdel(`client:${clientId}`, 'roomId');
     }
 
-    await redis.del(`room:${roomId}`);
+    await Promise.all([
+        redis.del(`room:${roomId}`),
+        ...room.clients.map((clientId) => redis.hdel(`client:${clientId}`, 'roomId')),
+    ]);
 }
 
 // Video operations
