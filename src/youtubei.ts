@@ -1,12 +1,12 @@
 import { Elysia, t } from 'elysia';
 import { Redis } from 'ioredis';
 import { Queue, Worker } from 'bullmq';
-import { Client, VideoCompact, SearchResult } from 'youtubei';
-import youtube from 'youtube-sr';
+import { Client, VideoCompact, SearchResult, Playlist, PlaylistVideos } from 'youtubei';
+import youtube, { Video as YouTubeSrVideo } from 'youtube-sr';
 
 import { createContextLogger } from '@/utils/logger';
 import { YouTubeVideo } from './types';
-import { formatSeconds } from './utils/common';
+import { cleanUpVideoField, formatSeconds } from './utils/common';
 
 const logger = createContextLogger('Search-Youtubei');
 const youtubeiLogger = createContextLogger('Queue/Youtubei');
@@ -106,7 +106,10 @@ export const searchYoutubeiElysia = new Elysia({})
         async ({
             body: { query, continuation },
             store: { youtubeiClient, redisClient, searchInstances },
-        }) => {
+        }): Promise<{
+            items: YouTubeVideo[];
+            continuation?: string | null;
+        }> => {
             let results: SearchResult<'video'> | undefined;
             let newItems: VideoCompact[] = [];
             const processedVideoIds = new Set<string>();
@@ -215,6 +218,25 @@ export const searchYoutubeiElysia = new Elysia({})
         {
             body: t.Object({
                 query: t.String(),
+            }),
+        },
+    )
+    .post(
+        '/playlist',
+        async ({ body: { playlistUrlOrId } }): Promise<YouTubeVideo[]> => {
+            if (!playlistUrlOrId.startsWith('http') && !playlistUrlOrId.includes('youtube.com')) {
+                playlistUrlOrId = `https://www.youtube.com/playlist?list=${playlistUrlOrId}&playnext=1`;
+            }
+
+            const url = new URL(playlistUrlOrId);
+            url.searchParams.set('playnext', '1');
+
+            const results = await youtube.getPlaylist(url.toString(), { fetchAll: true });
+            return results.videos.map(cleanUpVideoField);
+        },
+        {
+            body: t.Object({
+                playlistUrlOrId: t.String(),
             }),
         },
     );

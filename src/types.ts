@@ -81,6 +81,7 @@ export type ClientMessage = MessageBase &
         | { type: 'clearQueue' }
         | { type: 'clearHistory' }
         | { type: 'addVideoAndMoveToTop'; video: YouTubeVideo }
+        | { type: 'importPlaylist'; playlistUrlOrId: string }
     );
 
 export type ServerMessage =

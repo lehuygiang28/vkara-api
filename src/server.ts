@@ -1,16 +1,23 @@
 import { Elysia, t } from 'elysia';
 import { ElysiaWS } from 'elysia/dist/ws';
 import * as mongoose from 'mongoose';
+import youtubeSr from 'youtube-sr';
 
 import { syncFromMongoDB, syncToMongoDB } from '@/mongodb-sync';
-import { cleanUpRoomField, generateRandomNumber, isNullish, shuffleArray } from '@/utils/common';
+import {
+    cleanUpRoomField,
+    cleanUpVideoField,
+    generateRandomNumber,
+    isNullish,
+    shuffleArray,
+} from '@/utils/common';
 import { wsLogger, roomLogger, createContextLogger } from '@/utils/logger';
 import { ErrorCode, RoomError } from '@/errors';
 import { scheduleCleanupJobs } from '@/queues/cleanup';
+import { scheduleSyncRedisToDb } from '@/queues/sync';
 import type { ClientMessage, ServerMessage, Room, ClientInfo, YouTubeVideo } from '@/types';
-import { scheduleSyncRedisToDb } from './queues/sync';
+
 import { redis } from './redis';
-import { searchYoutubeiElysia } from './youtubei';
 
 const serverLogger = createContextLogger('Server');
 const IS_ENCRYPTED_PASSWORD = process.env.IS_ENCRYPTED_PASSWORD === 'true';
@@ -453,14 +460,39 @@ async function addVideoAndMoveToTop(ws: ElysiaWS, video: YouTubeVideo) {
     ]);
 }
 
+async function importPlaylist(ws: ElysiaWS, playlistUrlOrId: string) {
+    const roomId = await validateClientInRoom(ws);
+    const room = await validateRoom(roomId);
+
+    if (!playlistUrlOrId.startsWith('http') && !playlistUrlOrId.includes('youtube.com')) {
+        playlistUrlOrId = `https://www.youtube.com/playlist?list=${playlistUrlOrId}&playnext=1`;
+    }
+    const url = new URL(playlistUrlOrId);
+    url.searchParams.set('playnext', '1');
+
+    const results = await youtubeSr.getPlaylist(url.toString(), { fetchAll: true, limit: 200 });
+    const videos = results.videos
+        .map(cleanUpVideoField)
+        .filter((v) => !room.videoQueue.some((q) => q.id === v.id));
+
+    room.videoQueue = [...room.videoQueue, ...videos];
+    room.lastActivity = Date.now();
+
+    if (!room?.playingNow && room?.videoQueue?.length > 0) {
+        room.playingNow = room.videoQueue.shift()!;
+        room.isPlaying = true;
+        room.currentTime = 0;
+    }
+
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'roomUpdate', room: cleanUpRoomField(room) }),
+    ]);
+}
+
 // Broadcasting utilities
 async function broadcastToRoom(roomId: string, message: ServerMessage): Promise<void> {
     wsServer.server?.publish(roomId, JSON.stringify(message));
-}
-
-async function sendRoomUpdate(ws: ElysiaWS, roomId: string) {
-    const room = await validateRoom(roomId);
-    sendToClient(ws, { type: 'roomUpdate', room: cleanUpRoomField(room) });
 }
 
 async function updateRoomActivity(roomId: string) {
@@ -469,7 +501,7 @@ async function updateRoomActivity(roomId: string) {
     await redis.set(`room:${roomId}`, JSON.stringify(room));
 }
 
-// Message handler
+// Handler for incoming messages from clients
 async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
     try {
         if (message?.requiresAck && message.id) {
@@ -564,6 +596,10 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
 
             case 'addVideoAndMoveToTop':
                 await addVideoAndMoveToTop(ws, message.video);
+                break;
+
+            case 'importPlaylist':
+                await importPlaylist(ws, message.playlistUrlOrId);
                 break;
 
             default:

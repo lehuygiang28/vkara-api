@@ -90,16 +90,16 @@ export function cleanUpVideoField(video: Video): YouTubeVideo {
 
     return {
         id: videoJSON.id,
-        duration: videoJSON.duration,
+        duration: videoJSON.duration || video.duration || 0,
         duration_formatted: videoJSON.duration_formatted || '0:00',
         title: videoJSON.title,
         type: videoJSON.type,
         uploadedAt: videoJSON.uploadedAt,
         url: videoJSON.url,
-        views: videoJSON.views,
+        views: videoJSON.views || video.views || 0,
         channel: {
             name: channel?.name || '',
-            verified: video.channel?.verified || false,
+            verified: video.channel?.verified || channel?.verified || false,
         },
         thumbnail: {
             url: videoJSON.thumbnail.url || '',
