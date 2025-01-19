@@ -18,6 +18,7 @@ import { scheduleSyncRedisToDb } from '@/queues/sync';
 import type { ClientMessage, ServerMessage, Room, ClientInfo, YouTubeVideo } from '@/types';
 
 import { redis } from './redis';
+import { checkEmbeddable } from './youtubei';
 
 const serverLogger = createContextLogger('Server');
 const IS_ENCRYPTED_PASSWORD = process.env.IS_ENCRYPTED_PASSWORD === 'true';
@@ -471,11 +472,37 @@ async function importPlaylist(ws: ElysiaWS, playlistUrlOrId: string) {
     url.searchParams.set('playnext', '1');
 
     const results = await youtubeSr.getPlaylist(url.toString(), { fetchAll: true, limit: 200 });
-    const videos = results.videos
-        .map(cleanUpVideoField)
-        .filter((v) => !room.videoQueue.some((q) => q.id === v.id));
+    const videoCandidates = results.videos.map(cleanUpVideoField);
 
-    room.videoQueue = [...room.videoQueue, ...videos];
+    // Batch processing with a limit of 50 videos per batch
+    const batchSize = 50;
+    const timeoutMs = 100; // Timeout between batches
+    const embeddableVideos = [];
+
+    for (let i = 0; i < videoCandidates.length; i += batchSize) {
+        const batch = videoCandidates.slice(i, i + batchSize);
+
+        const batchResults = await Promise.all(
+            batch.map(async (video) => {
+                const isNotInQueue = !room.videoQueue.some((q) => q.id === video.id);
+                if (isNotInQueue && (await checkEmbeddable(video.id))) {
+                    return video;
+                }
+                return null;
+            }),
+        );
+
+        // Filter out null results
+        embeddableVideos.push(...batchResults.filter((video) => video !== null));
+
+        // Wait for timeout before processing the next batch
+        if (i + batchSize < videoCandidates.length) {
+            await new Promise((resolve) => setTimeout(resolve, timeoutMs));
+        }
+    }
+
+    // Add the embeddable videos to the room queue
+    room.videoQueue = [...room.videoQueue, ...embeddableVideos];
     room.lastActivity = Date.now();
 
     if (!room?.playingNow && room?.videoQueue?.length > 0) {
