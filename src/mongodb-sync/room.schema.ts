@@ -9,7 +9,7 @@ import type { Room, YouTubeVideo } from '@/types';
 // Define a reusable sub-schema for video objects
 const videoSchema = new mongoose.Schema<YouTubeVideo>({
     id: { type: String, required: true },
-    url: { type: String, required: true },
+    url: { type: String, required: false, default: null },
     title: { type: String, required: true },
     duration: { type: Number, required: true },
     duration_formatted: { type: String },
@@ -19,10 +19,10 @@ const videoSchema = new mongoose.Schema<YouTubeVideo>({
     },
     channel: {
         name: { type: String, required: true },
-        verified: { type: Boolean, required: true },
+        verified: { type: Boolean, required: false, default: false },
     },
-    views: { type: Number },
-    type: { type: String },
+    views: { type: Number, required: false, default: 0 },
+    type: { type: String, required: false, default: 'video' },
 });
 
 // Define the room schema
