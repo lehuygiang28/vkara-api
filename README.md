@@ -7,7 +7,6 @@
 - [Bun](https://github.com/oven-sh/bun)
 - [Elysia](https://github.com/elysiajs/elysia)
 - Websockets, MongoDB, Redis, Bullmq
-- Puppeteer (using for checking youtube can embed or not)
 
 ## How to run
 
