@@ -3,10 +3,8 @@
     "version": "0.0.1",
     "scripts": {
         "dev": "bun run --watch bin/ws.ts",
-        "dev2": "bun run --watch bin/check-youtube.ts",
         "dev-aio": "bun run --watch bin/aio.ts",
         "build": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server ./bin/ws.ts",
-        "build2": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server2 ./bin/check-youtube.ts",
         "build-aio": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile aio ./bin/aio.ts"
     },
     "dependencies": {
@@ -19,7 +17,6 @@
         "ioredis": "^5.4.2",
         "locate-chrome": "^0.1.1",
         "mongoose": "^8.9.5",
-        "puppeteer": "^24.1.0",
         "winston": "^3.17.0",
         "youtubei": "^1.6.7"
     },
