@@ -14,6 +14,7 @@
         "bullmq": "^5.34.8",
         "chalk": "^5.4.1",
         "elysia": "^1.2.10",
+        "elysia-rate-limit": "^4.1.0",
         "ioredis": "^5.4.2",
         "locate-chrome": "^0.1.1",
         "mongoose": "^8.9.5",
