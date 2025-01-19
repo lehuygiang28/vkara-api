@@ -6,6 +6,7 @@
         "hdel",
         "hgetall",
         "hset",
+        "playnext",
         "supervisord",
         "vkara",
         "Youtubei"
