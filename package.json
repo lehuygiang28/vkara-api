@@ -2,10 +2,8 @@
     "name": "vkara-api",
     "version": "0.0.1",
     "scripts": {
-        "dev": "bun run --watch bin/ws.ts",
-        "dev-aio": "bun run --watch bin/aio.ts",
-        "build": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server ./bin/ws.ts",
-        "build-aio": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile aio ./bin/aio.ts"
+        "dev": "bun run --watch ./src/index.ts",
+        "build": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server ./src/index.ts"
     },
     "dependencies": {
         "@elysiajs/cors": "^1.2.0",

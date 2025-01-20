@@ -2,6 +2,10 @@ import { Elysia, t } from 'elysia';
 import { ElysiaWS } from 'elysia/dist/ws';
 import * as mongoose from 'mongoose';
 import youtubeSr from 'youtube-sr';
+import cors from '@elysiajs/cors';
+import swagger from '@elysiajs/swagger';
+import serverTiming from '@elysiajs/server-timing';
+import { rateLimit } from 'elysia-rate-limit';
 
 import { syncFromMongoDB, syncToMongoDB } from '@/mongodb-sync';
 import {
@@ -18,7 +22,7 @@ import { scheduleSyncRedisToDb } from '@/queues/sync';
 import type { ClientMessage, ServerMessage, Room, ClientInfo, YouTubeVideo } from '@/types';
 
 import { redis } from './redis';
-import { checkEmbeddable } from './youtubei';
+import { checkEmbeddable, searchYoutubeiElysia } from './youtubei';
 
 const serverLogger = createContextLogger('Server');
 const IS_ENCRYPTED_PASSWORD = process.env.IS_ENCRYPTED_PASSWORD === 'true';
@@ -686,7 +690,27 @@ export const wsServer = new Elysia({
             wsConnections.delete(ws.id);
         },
         message: (ws, message: ClientMessage) => handleMessage(ws, message),
-    });
+    })
+    .use(cors())
+    .use(swagger())
+    .use(serverTiming())
+    .use(
+        rateLimit({
+            scoping: 'global',
+            generator: (req, server) =>
+                // get client ip via cloudflare header first
+                req.headers.get('CF-Connecting-IP') ??
+                // if not found, fallback to default generator
+                server?.requestIP(req)?.address ??
+                '',
+            // max 20 requests per duration
+            max: 20,
+            // milliseconds
+            duration: 1000,
+        }),
+    )
+    .use(searchYoutubeiElysia)
+    .listen(process.env.PORT || 8000);
 
 process.on('beforeExit', async () => {
     serverLogger.info('Server stopping');
