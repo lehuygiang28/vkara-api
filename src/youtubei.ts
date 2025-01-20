@@ -252,7 +252,7 @@ export const searchYoutubeiElysia = new Elysia({})
         '/related',
         async ({ body: { videoId }, store: { youtubeiClient } }): Promise<YouTubeVideo[]> => {
             const video = await youtubeiClient.getVideo(videoId);
-            const newItems = video?.related.items;
+            const newItems = video?.related?.items;
             if (!newItems) {
                 return [];
             }
