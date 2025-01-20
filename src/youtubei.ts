@@ -3,6 +3,7 @@ import { Redis } from 'ioredis';
 import { Queue, Worker } from 'bullmq';
 import { Client, OAuth, type VideoCompact, type SearchResult } from 'youtubei';
 import youtube from 'youtube-sr';
+import youtubeSearch from 'youtube-search-api';
 
 import { createContextLogger } from '@/utils/logger';
 import type { YouTubeVideo } from './types';
@@ -262,37 +263,45 @@ export const searchYoutubeiElysia = new Elysia({})
             store: { youtubeiClient },
         }): Promise<{ items: YouTubeVideo[] }> => {
             try {
-                const video = await youtubeiClient.findOne(videoId, { type: 'video' });
-                logger.info(`Getting related videos for "${video?.title} - ${videoId}"`, {
-                    videoId,
-                });
-                const newItems = (await video?.getVideo())?.related.items;
-
-                logger.info(`Found ${newItems?.length} related videos`, { videoId, newItems });
-                if (!newItems) {
-                    return {
-                        items: [],
-                    };
+                const suggestions = (await youtubeSearch.GetVideoDetails(videoId)).suggestion;
+                if (!suggestions || suggestions.length === 0) {
+                    return { items: [] };
                 }
-
-                const videos = await Promise.all(
-                    newItems.map(async (item) => {
-                        const video = mapYoutubeiVideo(item as VideoCompact);
-                        const isEmbeddable = await checkEmbeddable(video.id);
-                        return isEmbeddable ? video : null;
+                const suggestionsEmbeddable = await Promise.all(
+                    suggestions.map(async (item) => {
+                        const isEmbeddable = await checkEmbeddable(item.id);
+                        return isEmbeddable ? item : null;
                     }),
                 );
-                const embeddableVideos = videos.filter((video) => video !== null);
 
-                return {
-                    items: embeddableVideos as YouTubeVideo[],
-                };
+                const videoPromises = await Promise.all(
+                    suggestionsEmbeddable.map(async (item) => {
+                        try {
+                            if (!item) {
+                                return null;
+                            }
+                            return mapYoutubeiVideo(
+                                (await youtubeiClient.getVideo(
+                                    item?.id,
+                                )) as unknown as VideoCompact,
+                            );
+                        } catch (error) {
+                            console.error(`Error processing video ${item?.id}:`, error);
+                            return null;
+                        }
+                    }),
+                );
+
+                const videos = await Promise.all(videoPromises);
+                const embeddableVideos = videos.filter(
+                    (video): video is YouTubeVideo => video !== null,
+                );
+
+                return { items: embeddableVideos };
             } catch (error) {
                 logger.error('Failed to get related videos', { error });
                 console.error(error);
-                return {
-                    items: [],
-                };
+                return { items: [] };
             }
         },
         {
