@@ -251,23 +251,28 @@ export const searchYoutubeiElysia = new Elysia({})
     .post(
         '/related',
         async ({ body: { videoId }, store: { youtubeiClient } }): Promise<YouTubeVideo[]> => {
-            const video = await youtubeiClient.getVideo(videoId);
-            const newItems = video?.related?.items;
-            if (!newItems) {
+            try {
+                const video = await youtubeiClient.getVideo(videoId);
+                const newItems = video?.related?.items;
+                if (!newItems) {
+                    return [];
+                }
+
+                const videos = await Promise.all(
+                    newItems.map(async (item) => {
+                        const video = mapYoutubeiVideo(item as VideoCompact);
+                        const isEmbeddable = await checkEmbeddable(video.id);
+                        return isEmbeddable ? video : null;
+                    }),
+                );
+                const embeddableVideos = videos.filter((video) => video !== null);
+
+                return embeddableVideos;
+            } catch (error) {
+                logger.error('Failed to get related videos', { error });
+                console.error(error);
                 return [];
             }
-
-            const embeddableVideos = await Promise.all(
-                newItems.map(async (item) => {
-                    const video = mapYoutubeiVideo(item as VideoCompact);
-                    const isEmbeddable = await checkEmbeddable(video.id);
-                    return isEmbeddable ? video : null;
-                }),
-            ).then((videos) =>
-                videos.filter((video): video is NonNullable<typeof video> => video !== null),
-            );
-
-            return embeddableVideos;
         },
         {
             body: t.Object({
