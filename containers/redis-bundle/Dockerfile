@@ -2,12 +2,8 @@ FROM oven/bun:alpine AS build
 
 WORKDIR /app
 
-COPY package.json package.json
-COPY bun.lockb bun.lockb
-COPY ./tsconfig.json ./tsconfig.json
-
+COPY package.json bun.lockb tsconfig.json ./
 COPY ./src ./src
-COPY ./bin ./bin
 
 RUN bun remove puppeteer
 RUN bun install
