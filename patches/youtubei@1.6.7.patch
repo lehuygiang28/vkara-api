@@ -1,8 +1,8 @@
 diff --git a/dist/cjs/youtube/Client/Client.js b/dist/cjs/youtube/Client/Client.js
-index c7bd7d4df0a1eee174d36f2483f5922b1a7c96e9..d9c2aa370747f3640dd8bc18bdbe7e16eab08e4e 100644
+index c7bd7d4df0a1eee174d36f2483f5922b1a7c96e9..4ec2624b7680efed7fd1ffc2d17988d61bca2cb3 100644
 --- a/dist/cjs/youtube/Client/Client.js
 +++ b/dist/cjs/youtube/Client/Client.js
-@@ -80,21 +80,35 @@ class Client {
+@@ -80,21 +80,32 @@ class Client {
      }
      /** Get video information by video id or URL */
      getVideo(videoId) {
@@ -22,9 +22,7 @@ index c7bd7d4df0a1eee174d36f2483f5922b1a7c96e9..d9c2aa370747f3640dd8bc18bdbe7e16
 +    
 +            if (
 +                !nextResponse ||
-+                !nextResponse.data?.contents?.twoColumnWatchNextResults?.results?.results?.contents ||
-+                !playerResponse ||
-+                playerResponse.data.playabilityStatus.status === "ERROR"
++                !nextResponse.data?.contents?.twoColumnWatchNextResults?.results?.results?.contents
 +            ) {
                  return undefined;
              }
@@ -32,7 +30,7 @@ index c7bd7d4df0a1eee174d36f2483f5922b1a7c96e9..d9c2aa370747f3640dd8bc18bdbe7e16
 +    
 +            const data = {
 +                response: nextResponse.data,
-+                playerResponse: playerResponse.data,
++                playerResponse: playerResponse?.data,
 +            };
 +    
 +            return !data.playerResponse.playabilityStatus.liveStreamability
@@ -40,16 +38,16 @@ index c7bd7d4df0a1eee174d36f2483f5922b1a7c96e9..d9c2aa370747f3640dd8bc18bdbe7e16
 -                : new LiveVideo_1.LiveVideo({ client: this }).load(data));
 +                : new LiveVideo_1.LiveVideo({ client: this }).load(data);
          });
-     }
-+    
+-    }
++    }    
      /** Get channel information by channel id+ */
      getChannel(channelId) {
          var _a, _b, _c;
 diff --git a/dist/esm/youtube/Client/Client.js b/dist/esm/youtube/Client/Client.js
-index 1c688649655f2deda8d41e24c7cd01297c0960f7..4d206c2f759cabfcfa23de286787934641bc6959 100644
+index 1c688649655f2deda8d41e24c7cd01297c0960f7..3625a15a39d4318f5679169a02ba4594062e14bb 100644
 --- a/dist/esm/youtube/Client/Client.js
 +++ b/dist/esm/youtube/Client/Client.js
-@@ -160,29 +160,43 @@ var Client = /** @class */ (function () {
+@@ -160,29 +160,41 @@ var Client = /** @class */ (function () {
      };
      /** Get video information by video id or URL */
      Client.prototype.getVideo = function (videoId) {
@@ -78,15 +76,13 @@ index 1c688649655f2deda8d41e24c7cd01297c0960f7..4d206c2f759cabfcfa23de2867879346
 +                        // Check if required data exists
 +                        if (
 +                            !nextResponse ||
-+                            !nextResponse.data?.contents?.twoColumnWatchNextResults?.results?.results?.contents ||
-+                            !playerResponse ||
-+                            playerResponse.data.playabilityStatus.status === "ERROR"
++                            !nextResponse.data?.contents?.twoColumnWatchNextResults?.results?.results?.contents
 +                        ) {
                              return [2 /*return*/, undefined];
                          }
 -                        return [2 /*return*/, (!data.playerResponse.playabilityStatus.liveStreamability
 +    
-+                        data = { response: nextResponse.data, playerResponse: playerResponse.data };
++                        data = { response: nextResponse.data, playerResponse: playerResponse?.data };
 +    
 +                        return [
 +                            2 /*return*/,
