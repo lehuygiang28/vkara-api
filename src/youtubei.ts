@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { Redis } from 'ioredis';
 import { Queue, Worker } from 'bullmq';
-import { Client, type VideoCompact, type SearchResult } from 'youtubei';
+import { Client, OAuth, type VideoCompact, type SearchResult } from 'youtubei';
 import youtube from 'youtube-sr';
 
 import { createContextLogger } from '@/utils/logger';
@@ -10,7 +10,14 @@ import { cleanUpVideoField, formatSeconds } from './utils/common';
 
 const logger = createContextLogger('Search-Youtubei');
 const youtubeiLogger = createContextLogger('Queue/Youtubei');
-const youtubei = new Client();
+
+const response = await OAuth.authorize();
+const youtubei = new Client({
+    oauth: {
+        enabled: true,
+        refreshToken: response.refreshToken,
+    },
+});
 
 // Redis connection
 const redis = new Redis({
@@ -250,29 +257,16 @@ export const searchYoutubeiElysia = new Elysia({})
     )
     .post(
         '/related',
-        async ({ body: { videoId } }): Promise<{ items: YouTubeVideo[] }> => {
+        async ({
+            body: { videoId },
+            store: { youtubeiClient },
+        }): Promise<{ items: YouTubeVideo[] }> => {
             try {
-                const client = new Client();
-                const video = await client.findOne(videoId, { type: 'video' });
+                const video = await youtubeiClient.findOne(videoId, { type: 'video' });
                 logger.info(`Getting related videos for "${video?.title} - ${videoId}"`, {
                     videoId,
                 });
                 const newItems = (await video?.getVideo())?.related.items;
-
-                // const nextPromise = await client.http.post(`/youtubei/v1/next`, {
-                //     data: { videoId },
-                // });
-                // const playerPromise = await client.http.post(`/youtubei/v1/player`, {
-                //     data: { videoId },
-                // });
-
-                // logger.info(`Next promise`, { nextPromise });
-                // console.error(nextPromise);
-
-                // logger.info(`Player promise`, { playerPromise });
-                // console.error(playerPromise);
-
-                // const newItems = video?.load(nextPromise);
 
                 logger.info(`Found ${newItems?.length} related videos`, { videoId, newItems });
                 if (!newItems) {
