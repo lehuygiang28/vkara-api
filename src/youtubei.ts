@@ -267,31 +267,34 @@ export const searchYoutubeiElysia = new Elysia({})
                 if (!suggestions || suggestions.length === 0) {
                     return { items: [] };
                 }
+                logger.info(`Found ${suggestions.length} related videos`, {
+                    ids: suggestions.map((s) => s.id),
+                });
                 const suggestionsEmbeddable = await Promise.all(
                     suggestions.map(async (item) => {
                         const isEmbeddable = await checkEmbeddable(item.id);
                         return isEmbeddable ? item : null;
                     }),
                 );
+                logger.info(`Found ${suggestionsEmbeddable.length} embeddable related videos`, {
+                    ids: suggestionsEmbeddable.map((s) => s?.id),
+                });
 
-                const videoPromises = await Promise.all(
-                    suggestionsEmbeddable.map(async (item) => {
-                        try {
-                            if (!item) {
-                                return null;
-                            }
-                            return mapYoutubeiVideo(
-                                (await youtubeiClient.getVideo(
-                                    item?.id,
-                                )) as unknown as VideoCompact,
-                            );
-                        } catch (error) {
-                            console.error(`Error processing video ${item?.id}:`, error);
+                const videoPromises = suggestionsEmbeddable.map(async (item) => {
+                    try {
+                        if (!item) {
                             return null;
                         }
-                    }),
-                );
-
+                        return mapYoutubeiVideo(
+                            (await youtubeiClient.findOne(item?.id, {
+                                type: 'video',
+                            })) as VideoCompact,
+                        );
+                    } catch (error) {
+                        console.error(`Error processing video ${item?.id}:`, error);
+                        return null;
+                    }
+                });
                 const videos = await Promise.all(videoPromises);
                 const embeddableVideos = videos.filter(
                     (video): video is YouTubeVideo => video !== null,
