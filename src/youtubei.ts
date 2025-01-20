@@ -249,6 +249,33 @@ export const searchYoutubeiElysia = new Elysia({})
         },
     )
     .post(
+        '/related',
+        async ({ body: { videoId }, store: { youtubeiClient } }): Promise<YouTubeVideo[]> => {
+            const video = await youtubeiClient.getVideo(videoId);
+            const newItems = video?.related.items;
+            if (!newItems) {
+                return [];
+            }
+
+            const embeddableVideos = await Promise.all(
+                newItems.map(async (item) => {
+                    const video = mapYoutubeiVideo(item as VideoCompact);
+                    const isEmbeddable = await checkEmbeddable(video.id);
+                    return isEmbeddable ? video : null;
+                }),
+            ).then((videos) =>
+                videos.filter((video): video is NonNullable<typeof video> => video !== null),
+            );
+
+            return embeddableVideos;
+        },
+        {
+            body: t.Object({
+                videoId: t.String(),
+            }),
+        },
+    )
+    .post(
         '/check-embeddable',
         async ({ body: { videoIds } }): Promise<{ videoId: string; canEmbed: boolean }[]> => {
             const results = await Promise.all(
