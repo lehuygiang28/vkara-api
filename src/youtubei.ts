@@ -250,12 +250,17 @@ export const searchYoutubeiElysia = new Elysia({})
     )
     .post(
         '/related',
-        async ({ body: { videoId }, store: { youtubeiClient } }): Promise<YouTubeVideo[]> => {
+        async ({
+            body: { videoId },
+            store: { youtubeiClient },
+        }): Promise<{ items: YouTubeVideo[] }> => {
             try {
-                const video = await youtubeiClient.getVideo(videoId);
-                const newItems = video?.related?.items;
+                const video = await youtubeiClient.findOne(videoId, { type: 'video' });
+                const newItems = (await video?.getVideo())?.related.items;
                 if (!newItems) {
-                    return [];
+                    return {
+                        items: [],
+                    };
                 }
 
                 const videos = await Promise.all(
@@ -267,11 +272,15 @@ export const searchYoutubeiElysia = new Elysia({})
                 );
                 const embeddableVideos = videos.filter((video) => video !== null);
 
-                return embeddableVideos;
+                return {
+                    items: embeddableVideos as YouTubeVideo[],
+                };
             } catch (error) {
                 logger.error('Failed to get related videos', { error });
                 console.error(error);
-                return [];
+                return {
+                    items: [],
+                };
             }
         },
         {
