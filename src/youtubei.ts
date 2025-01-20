@@ -250,12 +250,10 @@ export const searchYoutubeiElysia = new Elysia({})
     )
     .post(
         '/related',
-        async ({
-            body: { videoId },
-            store: { youtubeiClient },
-        }): Promise<{ items: YouTubeVideo[] }> => {
+        async ({ body: { videoId } }): Promise<{ items: YouTubeVideo[] }> => {
             try {
-                const video = await youtubeiClient.findOne(videoId, { type: 'video' });
+                const client = new Client();
+                const video = await client.findOne(videoId, { type: 'video' });
                 logger.info(`Getting related videos for "${video?.title}"`, { videoId });
 
                 const newItems = (await video?.client.getVideo(videoId))?.related.items;
