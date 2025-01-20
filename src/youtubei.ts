@@ -257,7 +257,9 @@ export const searchYoutubeiElysia = new Elysia({})
             try {
                 const video = await youtubeiClient.findOne(videoId, { type: 'video' });
                 logger.info(`Getting related videos for "${video?.title}"`, { videoId });
-                const newItems = (await video?.getVideo())?.related.items;
+
+                const newItems = (await video?.client.getVideo(videoId))?.related.items;
+
                 logger.info(`Found ${newItems?.length} related videos`, { videoId, newItems });
                 if (!newItems) {
                     return {

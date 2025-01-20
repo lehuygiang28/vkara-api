@@ -54,9 +54,6 @@ jobs:
                   username: ${{ env.DOCKERHUB_USERNAME }}
                   password: ${{ env.DOCKERHUB_PASSWORD }}
 
-            - name: Free disk space up
-              run: rm -rf /opt/hostedtoolcache
-
             - name: Install dotenvx
               run: curl -sfS https://dotenvx.sh/install.sh | sh
 
