@@ -5,7 +5,6 @@ WORKDIR /app
 COPY package.json bun.lockb tsconfig.json ./
 COPY ./src ./src
 
-RUN bun remove puppeteer
 RUN bun install
 
 ENV NODE_ENV=production
