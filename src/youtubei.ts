@@ -11,11 +11,11 @@ import { cleanUpVideoField, formatSeconds } from './utils/common';
 const logger = createContextLogger('Search-Youtubei');
 const youtubeiLogger = createContextLogger('Queue/Youtubei');
 
-const response = await OAuth.authorize();
+// const response = await OAuth.authorize();
 const youtubei = new Client({
     oauth: {
-        enabled: true,
-        refreshToken: response.refreshToken,
+        enabled: false,
+        // refreshToken: response.refreshToken,
     },
 });
 
