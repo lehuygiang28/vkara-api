@@ -1,11 +1,11 @@
 import { Elysia, t } from 'elysia';
 import { Redis } from 'ioredis';
 import { Queue, Worker } from 'bullmq';
-import { Client, VideoCompact, SearchResult, Playlist, PlaylistVideos } from 'youtubei';
-import youtube, { Video as YouTubeSrVideo } from 'youtube-sr';
+import { Client, type VideoCompact, type SearchResult } from 'youtubei';
+import youtube from 'youtube-sr';
 
 import { createContextLogger } from '@/utils/logger';
-import { YouTubeVideo } from './types';
+import type { YouTubeVideo } from './types';
 import { cleanUpVideoField, formatSeconds } from './utils/common';
 
 const logger = createContextLogger('Search-Youtubei');
@@ -187,13 +187,21 @@ export const searchYoutubeiElysia = new Elysia({})
                 );
             }
 
-            const videos = newItems.map(mapYoutubeiVideo);
+            const embeddableVideos = await Promise.all(
+                newItems.map(async (item) => {
+                    const video = mapYoutubeiVideo(item);
+                    const isEmbeddable = await checkEmbeddable(video.id);
+                    return isEmbeddable ? video : null;
+                }),
+            ).then((videos) =>
+                videos.filter((video): video is NonNullable<typeof video> => video !== null),
+            );
 
             // Log current cache size
             logger.debug(`Current search instances cache size: ${searchInstances.size}`);
 
             return {
-                items: videos,
+                items: embeddableVideos,
                 continuation: results?.continuation,
             };
         },
