@@ -4,7 +4,6 @@ WORKDIR /app
 
 COPY package.json bun.lockb tsconfig.json ./
 COPY ./src ./src
-COPY ./patches ./patches
 
 # `puppeteer` only use for `check-youtube-available.ts`
 # remove it for smaller image size

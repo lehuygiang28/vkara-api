@@ -4,7 +4,6 @@ WORKDIR /app
 
 COPY package.json bun.lockb tsconfig.json ./
 COPY ./src ./src
-COPY ./patches ./patches
 
 RUN bun install
 
