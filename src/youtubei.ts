@@ -267,18 +267,16 @@ export const searchYoutubeiElysia = new Elysia({})
                 if (!suggestions || suggestions.length === 0) {
                     return { items: [] };
                 }
-                logger.info(`Found ${suggestions.length} related videos`, {
-                    ids: suggestions.map((s) => s.id),
-                });
+
                 const suggestionsEmbeddable = await Promise.all(
                     suggestions.map(async (item) => {
+                        if (!item?.id) {
+                            return null;
+                        }
                         const isEmbeddable = await checkEmbeddable(item.id);
                         return isEmbeddable ? item : null;
                     }),
                 );
-                logger.info(`Found ${suggestionsEmbeddable.length} embeddable related videos`, {
-                    ids: suggestionsEmbeddable.map((s) => s?.id),
-                });
 
                 const videoPromises = suggestionsEmbeddable.map(async (item) => {
                     try {
@@ -291,7 +289,7 @@ export const searchYoutubeiElysia = new Elysia({})
                             })) as VideoCompact,
                         );
                     } catch (error) {
-                        console.error(`Error processing video ${item?.id}:`, error);
+                        logger.error(`Error processing video ${item?.id}:`, { error });
                         return null;
                     }
                 });
@@ -303,7 +301,6 @@ export const searchYoutubeiElysia = new Elysia({})
                 return { items: embeddableVideos };
             } catch (error) {
                 logger.error('Failed to get related videos', { error });
-                console.error(error);
                 return { items: [] };
             }
         },
