@@ -257,20 +257,22 @@ export const searchYoutubeiElysia = new Elysia({})
                 logger.info(`Getting related videos for "${video?.title} - ${videoId}"`, {
                     videoId,
                 });
-                const nextPromise = await client.http.post(`/youtubei/v1/next`, {
-                    data: { videoId },
-                });
-                const playerPromise = await client.http.post(`/youtubei/v1/player`, {
-                    data: { videoId },
-                });
-
-                logger.info(`Next promise`, { nextPromise });
-                console.error(nextPromise);
-
-                logger.info(`Player promise`, { playerPromise });
-                console.error(playerPromise);
-
                 const newItems = (await video?.getVideo())?.related.items;
+
+                // const nextPromise = await client.http.post(`/youtubei/v1/next`, {
+                //     data: { videoId },
+                // });
+                // const playerPromise = await client.http.post(`/youtubei/v1/player`, {
+                //     data: { videoId },
+                // });
+
+                // logger.info(`Next promise`, { nextPromise });
+                // console.error(nextPromise);
+
+                // logger.info(`Player promise`, { playerPromise });
+                // console.error(playerPromise);
+
+                // const newItems = video?.load(nextPromise);
 
                 logger.info(`Found ${newItems?.length} related videos`, { videoId, newItems });
                 if (!newItems) {
