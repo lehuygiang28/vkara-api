@@ -13,6 +13,10 @@ RUN bun run build
 
 FROM build AS production
 
+LABEL git="https://github.com/lehuygiang28/vkara-api"
+LABEL author="lehuygiang28 <lehuygiang28@gmail.com>"
+LABEL org.opencontainers.image.maintainer="lehuygiang28 <lehuygiang28@gmail.com>"
+
 WORKDIR /app
 
 RUN mkdir -p /app && \

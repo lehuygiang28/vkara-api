@@ -5,11 +5,9 @@ WORKDIR /app
 COPY package.json bun.lockb tsconfig.json ./
 COPY ./src ./src
 
-# `puppeteer` only use for `check-youtube-available.ts`
-# remove it for smaller image size
-# `check-youtube-available.ts` will be built in other image
-RUN bun remove puppeteer
 RUN bun install
+
+ENV NODE_ENV=production
 
 RUN bun run build
 
