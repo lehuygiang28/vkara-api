@@ -63,10 +63,10 @@ function handleError(ws: ElysiaWS, error: Error | RoomError) {
 }
 
 // Room utilities
-async function validateRoom(roomId: string): Promise<Room> {
+async function validateRoom(roomId: string, isRejoin = false): Promise<Room> {
     const roomData = await redis.get(`room:${roomId}`);
     if (!roomData) {
-        throw new RoomError(ErrorCode.ROOM_NOT_FOUND);
+        throw new RoomError(isRejoin ? ErrorCode.REJOIN_ROOM_NOT_FOUND : ErrorCode.ROOM_NOT_FOUND);
     }
     return JSON.parse(roomData);
 }
@@ -131,8 +131,8 @@ async function createRoom(ws: ElysiaWS, password?: string) {
     sendToClient(ws, { type: 'roomCreated', roomId });
 }
 
-async function joinRoom(ws: ElysiaWS, roomId: string, password?: string) {
-    const room = await validateRoom(roomId);
+async function joinRoom(ws: ElysiaWS, roomId: string, password?: string, isRejoin = false) {
+    const room = await validateRoom(roomId, isRejoin);
 
     if (!isNullish(password) && !isNullish(room?.password)) {
         const isPasswordValid = IS_ENCRYPTED_PASSWORD
@@ -562,6 +562,11 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
 
             case 'joinRoom':
                 await joinRoom(ws, message.roomId, message.password);
+                break;
+
+            case 'reJoinRoom':
+                // With set isRejoin to true will throw REJOIN_ROOM_NOT_FOUND
+                await joinRoom(ws, message.roomId, message.password, true);
                 break;
 
             case 'leaveRoom':

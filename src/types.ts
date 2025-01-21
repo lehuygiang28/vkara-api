@@ -63,6 +63,7 @@ export type ClientMessage = MessageBase &
         | { type: 'ping' }
         | { type: 'createRoom'; password?: string }
         | { type: 'joinRoom'; roomId: string; password?: string }
+        | { type: 'reJoinRoom'; roomId: string; password?: string }
         | { type: 'leaveRoom' }
         | { type: 'closeRoom' }
         | { type: 'sendMessage'; message: string }

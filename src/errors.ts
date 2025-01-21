@@ -9,6 +9,7 @@ export enum ErrorCode {
     ALREADY_IN_QUEUE = 'alreadyInQueue',
     VIDEO_NOT_FOUND = 'videoNotFound',
     VIDEO_NOT_EMBEDDABLE = 'videoNotEmbeddable',
+    'REJOIN_ROOM_NOT_FOUND' = 'rejoinRoomNotFound',
 }
 
 export interface ErrorResponse {
@@ -36,6 +37,7 @@ function getDefaultErrorMessage(code: ErrorCode): string {
         [ErrorCode.ALREADY_IN_QUEUE]: 'Video is already in queue',
         [ErrorCode.VIDEO_NOT_FOUND]: 'Video not found',
         [ErrorCode.VIDEO_NOT_EMBEDDABLE]: 'Video cannot be embedded',
+        [ErrorCode.REJOIN_ROOM_NOT_FOUND]: 'Rejoin room not found',
     };
     return messages[code];
 }
