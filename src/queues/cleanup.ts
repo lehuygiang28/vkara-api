@@ -9,6 +9,10 @@ import { validateDataIntegrity } from '@/mongodb-sync';
 const INACTIVE_TIMEOUT = parseInt(process.env.INACTIVE_TIMEOUT || '300') * 1000; // default 5 minutes
 const ORPHANED_CLIENT_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
 
+// Video playback timeout settings
+const MIN_VIDEO_TIMEOUT_HOURS = parseFloat(process.env.MIN_VIDEO_TIMEOUT_HOURS || '1'); // default 1 hour minimum
+const VIDEO_DURATION_MULTIPLIER = parseFloat(process.env.VIDEO_DURATION_MULTIPLIER || '3'); // default 3x video duration
+
 const logger = createContextLogger('Queue/Cleanup');
 
 const connection = new Redis({
@@ -61,7 +65,19 @@ worker.on('failed', (job, error) => {
     });
 });
 
-// Function to clean up inactive rooms
+/**
+ * Cleans up inactive rooms based on timeout settings.
+ *
+ * For rooms with no active video playback, the standard INACTIVE_TIMEOUT is used.
+ * For rooms with an active video playing, an extended timeout is used which is the maximum of:
+ *   - MIN_VIDEO_TIMEOUT_HOURS (defaults to 1 hour)
+ *   - VIDEO_DURATION_MULTIPLIER * video duration (defaults to 3x video duration)
+ *
+ * This prevents rooms from being closed while a video is still playing,
+ * which is especially important for longer videos.
+ *
+ * @returns {Promise<{cleanedRoomsCount: number}>} The number of rooms that were cleaned up
+ */
 async function cleanupInactiveRooms() {
     const keys = await connection.keys('room:*');
     const now = Date.now();
@@ -78,7 +94,28 @@ async function cleanupInactiveRooms() {
 
         try {
             const room: Room = JSON.parse(roomData);
-            const isInactive = room.lastActivity && now - room.lastActivity > INACTIVE_TIMEOUT;
+
+            // Determine timeout based on playback status
+            let timeoutMs = INACTIVE_TIMEOUT;
+
+            // If there's a video playing, use extended timeout
+            if (room.playingNow && room.isPlaying) {
+                const videoDurationMs = (room.playingNow.duration || 0) * 1000;
+                const minTimeoutMs = MIN_VIDEO_TIMEOUT_HOURS * 60 * 60 * 1000; // Convert hours to ms
+                // Use the maximum of MIN_VIDEO_TIMEOUT_HOURS or VIDEO_DURATION_MULTIPLIER times the video duration
+                timeoutMs = Math.max(minTimeoutMs, videoDurationMs * VIDEO_DURATION_MULTIPLIER);
+                logger.debug(`Room ${room.id} has a playing video, using extended timeout`, {
+                    roomId: room.id,
+                    videoDuration: room.playingNow.duration,
+                    extendedTimeoutMs: timeoutMs,
+                    extendedTimeoutMinutes: Math.round(timeoutMs / (60 * 1000)),
+                    extendedTimeoutHours: (timeoutMs / (60 * 60 * 1000)).toFixed(2),
+                    minTimeoutHours: MIN_VIDEO_TIMEOUT_HOURS,
+                    durationMultiplier: VIDEO_DURATION_MULTIPLIER,
+                });
+            }
+
+            const isInactive = room.lastActivity && now - room.lastActivity > timeoutMs;
 
             // Check if room has no clients
             const isEmpty = !room.clients || room.clients.length === 0;
@@ -89,6 +126,7 @@ async function cleanupInactiveRooms() {
                     reason: isInactive ? 'inactivity' : 'empty room',
                     lastActivity: new Date(room.lastActivity).toISOString(),
                     clientCount: room.clients.length,
+                    hasPlayingVideo: !!room.playingNow && room.isPlaying,
                 });
 
                 await closeRoom(
