@@ -29,24 +29,45 @@ const IS_ENCRYPTED_PASSWORD = process.env.IS_ENCRYPTED_PASSWORD === 'true';
 
 if (process.env.MONGODB_URI) {
     mongoose
-        .connect(process.env.MONGODB_URI)
+        .connect(process.env.MONGODB_URI, {
+            serverSelectionTimeoutMS: 5000,
+            socketTimeoutMS: 45000,
+        })
         .then(() => {
             serverLogger.info('MongoDB connected');
-            scheduleSyncRedisToDb().catch(serverLogger.error);
+            scheduleSyncRedisToDb().catch((error) => {
+                serverLogger.error('Failed to schedule Redis to DB sync', { error });
+            });
         })
         .catch((error) => {
             serverLogger.error('MongoDB connection error', { error });
+            // Retry connection after delay
+            setTimeout(() => {
+                serverLogger.info('Retrying MongoDB connection...');
+                mongoose
+                    .connect(process.env.MONGODB_URI!)
+                    .then(() => {
+                        serverLogger.info('MongoDB connected after retry');
+                    })
+                    .catch((retryError) => {
+                        serverLogger.error('MongoDB retry connection error', { error: retryError });
+                    });
+            }, 5000);
         });
 }
 
 export const wsConnections = new Map<string, ElysiaWS>();
 
 // Core utilities
-export function sendToClient(ws: ElysiaWS, message: ServerMessage) {
-    return ws.send(JSON.stringify(message));
+export function sendToClient(ws: ElysiaWS, message: ServerMessage): void {
+    try {
+        ws.send(JSON.stringify(message));
+    } catch (error) {
+        serverLogger.error('Failed to send message to client', { error, clientId: ws.id });
+    }
 }
 
-function handleError(ws: ElysiaWS, error: Error | RoomError) {
+function handleError(ws: ElysiaWS, error: Error | RoomError): void {
     if (error instanceof RoomError) {
         sendToClient(ws, {
             type: 'errorWithCode',
@@ -58,17 +79,27 @@ function handleError(ws: ElysiaWS, error: Error | RoomError) {
             type: 'error',
             message: 'An unexpected error occurred',
         });
-        serverLogger.error('Unexpected error', { error });
+        serverLogger.error('Unexpected error', { error, clientId: ws.id });
     }
 }
 
 // Room utilities
 async function validateRoom(roomId: string, isRejoin = false): Promise<Room> {
+    if (!roomId || typeof roomId !== 'string') {
+        throw new RoomError(ErrorCode.INVALID_MESSAGE, 'Room ID must be a valid string');
+    }
+
     const roomData = await redis.get(`room:${roomId}`);
     if (!roomData) {
         throw new RoomError(isRejoin ? ErrorCode.REJOIN_ROOM_NOT_FOUND : ErrorCode.ROOM_NOT_FOUND);
     }
-    return JSON.parse(roomData);
+
+    try {
+        return JSON.parse(roomData);
+    } catch (error) {
+        serverLogger.error('Failed to parse room data', { roomId, error });
+        throw new RoomError(ErrorCode.INTERNAL_ERROR, 'Failed to parse room data');
+    }
 }
 
 async function validateClientInRoom(ws: ElysiaWS): Promise<string> {
@@ -215,7 +246,11 @@ export async function closeRoom(roomId: string, reason = 'Room closed by creator
 }
 
 // Video operations
-async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
+async function addVideo(ws: ElysiaWS, video: YouTubeVideo): Promise<void> {
+    if (!video || !video.id) {
+        throw new RoomError(ErrorCode.INVALID_MESSAGE, 'Invalid video data');
+    }
+
     const roomId = await validateClientInRoom(ws);
     const room = await validateRoom(roomId);
 
@@ -223,23 +258,32 @@ async function addVideo(ws: ElysiaWS, video: YouTubeVideo) {
         throw new RoomError(ErrorCode.ALREADY_IN_QUEUE);
     }
 
-    if (!(await checkEmbeddable(video.id))) {
-        throw new RoomError(ErrorCode.VIDEO_NOT_EMBEDDABLE, 'Video is not embeddable');
-    }
+    try {
+        const isEmbeddable = await checkEmbeddable(video.id);
+        if (!isEmbeddable) {
+            throw new RoomError(ErrorCode.VIDEO_NOT_EMBEDDABLE, 'Video is not embeddable');
+        }
 
-    if (!room?.playingNow && room?.videoQueue?.length <= 0) {
-        room.playingNow = video;
-        room.isPlaying = true;
-        room.currentTime = 0;
-    } else {
-        room.videoQueue = [...room.videoQueue, video];
-    }
-    room.lastActivity = Date.now();
+        if (!room?.playingNow && room?.videoQueue?.length <= 0) {
+            room.playingNow = video;
+            room.isPlaying = true;
+            room.currentTime = 0;
+        } else {
+            room.videoQueue = [...room.videoQueue, video];
+        }
+        room.lastActivity = Date.now();
 
-    await Promise.all([
-        redis.set(`room:${roomId}`, JSON.stringify(room)),
-        broadcastToRoom(roomId, { type: 'roomUpdate', room: cleanUpRoomField(room) }),
-    ]);
+        await Promise.all([
+            redis.set(`room:${roomId}`, JSON.stringify(room)),
+            broadcastToRoom(roomId, { type: 'roomUpdate', room: cleanUpRoomField(room) }),
+        ]);
+    } catch (error) {
+        if (error instanceof RoomError) {
+            throw error;
+        }
+        serverLogger.error('Failed to add video', { videoId: video.id, error });
+        throw new RoomError(ErrorCode.INTERNAL_ERROR, 'Failed to add video');
+    }
 }
 
 async function playVideoNow(ws: ElysiaWS, video: YouTubeVideo) {
@@ -311,17 +355,17 @@ async function nextVideo(ws: ElysiaWS) {
 }
 
 // Playback operations
-async function setVolume(ws: ElysiaWS, volume: number) {
+async function setVolume(ws: ElysiaWS, volume: number): Promise<void> {
     const roomId = await validateClientInRoom(ws);
-    const room = await validateRoom(roomId);
 
-    room.volume = Math.min(100, Math.max(0, volume));
-    room.lastActivity = Date.now();
+    await updateRoom(roomId, (room) => {
+        room.volume = Math.min(100, Math.max(0, volume));
+    });
 
-    await Promise.all([
-        redis.set(`room:${roomId}`, JSON.stringify(room)),
-        broadcastToRoom(roomId, { type: 'volumeChanged', volume: room.volume }),
-    ]);
+    await broadcastToRoom(roomId, {
+        type: 'volumeChanged',
+        volume: (await getRoomWithCache(roomId)).volume,
+    });
 }
 
 async function play(ws: ElysiaWS) {
@@ -544,8 +588,60 @@ async function updateRoomActivity(roomId: string) {
     await redis.set(`room:${roomId}`, JSON.stringify(room));
 }
 
+// Optimize room update with memoization and batch updates
+const roomCache = new Map<string, { room: Room; timestamp: number }>();
+const CACHE_TTL = 2000; // 2 seconds cache TTL
+
+async function getRoomWithCache(roomId: string): Promise<Room> {
+    const now = Date.now();
+    const cached = roomCache.get(roomId);
+
+    if (cached && now - cached.timestamp < CACHE_TTL) {
+        return cached.room;
+    }
+
+    const room = await validateRoom(roomId);
+    roomCache.set(roomId, { room, timestamp: now });
+    return room;
+}
+
+async function updateRoom(roomId: string, updater: (room: Room) => void): Promise<Room> {
+    const room = await getRoomWithCache(roomId);
+
+    updater(room);
+    room.lastActivity = Date.now();
+
+    await Promise.all([
+        redis.set(`room:${roomId}`, JSON.stringify(room)),
+        broadcastToRoom(roomId, { type: 'roomUpdate', room: cleanUpRoomField(room) }),
+    ]);
+
+    // Update cache
+    roomCache.set(roomId, { room, timestamp: Date.now() });
+
+    return room;
+}
+
+// Add type guard for client messages
+function isValidClientMessage(message: unknown): message is ClientMessage {
+    if (!message || typeof message !== 'object') return false;
+
+    const msg = message as Record<string, unknown>;
+    if (!msg.type || typeof msg.type !== 'string') return false;
+
+    return true;
+}
+
 // Handler for incoming messages from clients
-async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
+async function handleMessage(ws: ElysiaWS, message: unknown): Promise<void> {
+    if (!isValidClientMessage(message)) {
+        sendToClient(ws, {
+            type: 'error',
+            message: 'Invalid message format',
+        });
+        return;
+    }
+
     try {
         if (message?.requiresAck && message.id) {
             sendToClient(ws, { type: 'ack', messageId: message.id });
@@ -587,10 +683,16 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
                 break;
 
             case 'addVideo':
+                if (!message.video) {
+                    throw new RoomError(ErrorCode.INVALID_MESSAGE, 'Missing video data');
+                }
                 await addVideo(ws, message.video);
                 break;
 
             case 'playNow':
+                if (!message.video) {
+                    throw new RoomError(ErrorCode.INVALID_MESSAGE, 'Missing video data');
+                }
                 await playVideoNow(ws, message.video);
                 break;
 
@@ -599,6 +701,9 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
                 break;
 
             case 'setVolume':
+                if (typeof message.volume !== 'number') {
+                    throw new RoomError(ErrorCode.INVALID_MESSAGE, 'Invalid volume value');
+                }
                 await setVolume(ws, message.volume);
                 break;
 
@@ -615,6 +720,9 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
                 break;
 
             case 'seek':
+                if (typeof message.time !== 'number') {
+                    throw new RoomError(ErrorCode.INVALID_MESSAGE, 'Invalid time value');
+                }
                 await seek(ws, message.time);
                 break;
 
@@ -623,6 +731,9 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
                 break;
 
             case 'moveToTop':
+                if (!message.videoId || typeof message.videoId !== 'string') {
+                    throw new RoomError(ErrorCode.INVALID_MESSAGE, 'Invalid video ID');
+                }
                 await moveVideoToTop(ws, message.videoId);
                 break;
 
@@ -639,19 +750,31 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
                 break;
 
             case 'removeVideoFromQueue':
+                if (!message.videoId || typeof message.videoId !== 'string') {
+                    throw new RoomError(ErrorCode.INVALID_MESSAGE, 'Invalid video ID');
+                }
                 await removeVideoFromQueue(ws, message.videoId);
                 break;
 
             case 'addVideoAndMoveToTop':
+                if (!message.video) {
+                    throw new RoomError(ErrorCode.INVALID_MESSAGE, 'Missing video data');
+                }
                 await addVideoAndMoveToTop(ws, message.video);
                 break;
 
             case 'importPlaylist':
+                if (!message.playlistUrlOrId || typeof message.playlistUrlOrId !== 'string') {
+                    throw new RoomError(ErrorCode.INVALID_MESSAGE, 'Invalid playlist URL or ID');
+                }
                 await importPlaylist(ws, message.playlistUrlOrId);
                 break;
 
             default:
-                throw new RoomError(ErrorCode.INVALID_MESSAGE);
+                throw new RoomError(
+                    ErrorCode.INVALID_MESSAGE,
+                    `Unknown message type: ${(message as { type: string }).type}`,
+                );
         }
     } catch (error) {
         handleError(ws, error instanceof Error ? error : new Error('Unknown error'));
@@ -661,20 +784,30 @@ async function handleMessage(ws: ElysiaWS, message: ClientMessage) {
 export const wsServer = new Elysia({
     websocket: {
         idleTimeout: 960,
+        maxPayloadLength: 1024 * 1024, // 1MB max payload
     },
 })
     .on('start', async () => {
         serverLogger.info('Server started');
         // Sync data from MongoDB to Redis on startup
-        await syncFromMongoDB(redis);
-        scheduleCleanupJobs().catch(serverLogger.error);
+        await syncFromMongoDB(redis).catch((error) => {
+            serverLogger.error('Failed to sync from MongoDB', { error });
+        });
+        scheduleCleanupJobs().catch((error) => {
+            serverLogger.error('Failed to schedule cleanup jobs', { error });
+        });
     })
     .on('stop', async () => {
         serverLogger.info('Server stop initiated');
-        await syncToMongoDB(redis);
-        await redis.quit();
-        await mongoose.disconnect();
-        await wsServer.stop();
+        try {
+            await syncToMongoDB(redis);
+            await redis.quit();
+            await mongoose.disconnect();
+            await wsServer.stop();
+            serverLogger.info('Server stopped successfully');
+        } catch (error) {
+            serverLogger.error('Error during server shutdown', { error });
+        }
     })
     .state('wsConnections', wsConnections)
     .ws('/ws', {
@@ -691,8 +824,15 @@ export const wsServer = new Elysia({
         },
         close: async (ws) => {
             wsLogger.info(`Client disconnected`, { clientId: ws.id });
-            await leaveRoom(ws);
-            wsConnections.delete(ws.id);
+            try {
+                await leaveCurrentRoom(ws);
+                wsConnections.delete(ws.id);
+            } catch (error) {
+                wsLogger.error('Error during client disconnect cleanup', {
+                    clientId: ws.id,
+                    error,
+                });
+            }
         },
         message: (ws, message: ClientMessage) => handleMessage(ws, message),
     })
@@ -717,10 +857,43 @@ export const wsServer = new Elysia({
     .use(searchYoutubeiElysia)
     .listen(process.env.PORT || 8000);
 
+// Setup graceful shutdown
 process.on('beforeExit', async () => {
-    serverLogger.info('Server stopping');
-    await syncToMongoDB(redis);
-    await redis.quit();
-    await mongoose.disconnect();
-    await wsServer.stop();
+    serverLogger.info('Server stopping due to beforeExit event');
+    await syncToMongoDB(redis).catch((error) => {
+        serverLogger.error('Failed to sync to MongoDB during shutdown', { error });
+    });
+    await redis.quit().catch((error) => {
+        serverLogger.error('Error closing Redis connection', { error });
+    });
+    await mongoose.disconnect().catch((error) => {
+        serverLogger.error('Error disconnecting from MongoDB', { error });
+    });
+    await wsServer.stop().catch((error) => {
+        serverLogger.error('Error stopping WebSocket server', { error });
+    });
+});
+
+// Handle signals for more graceful shutdown
+['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach((signal) => {
+    process.on(signal, async () => {
+        serverLogger.info(`Server stopping due to ${signal} signal`);
+        // Allow 5 seconds for cleanup
+        setTimeout(() => {
+            serverLogger.warn('Forced exit after timeout');
+            process.exit(1);
+        }, 5000);
+
+        try {
+            await syncToMongoDB(redis);
+            await redis.quit();
+            await mongoose.disconnect();
+            await wsServer.stop();
+            serverLogger.info('Clean shutdown completed');
+            process.exit(0);
+        } catch (error) {
+            serverLogger.error('Error during shutdown', { error });
+            process.exit(1);
+        }
+    });
 });
