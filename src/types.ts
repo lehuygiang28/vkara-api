@@ -4,6 +4,7 @@ import { ErrorCode } from '@/errors';
 export interface ClientInfo {
     id: string;
     roomId?: string;
+    lastSeen?: number;
 }
 
 export interface SearchResults {

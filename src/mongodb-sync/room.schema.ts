@@ -26,18 +26,70 @@ const videoSchema = new mongoose.Schema<YouTubeVideo>({
 });
 
 // Define the room schema
-const roomSchema = new mongoose.Schema<Room>({
-    id: { type: String, required: true },
-    password: { type: String, required: false, default: null },
-    clients: [{ type: String }],
-    videoQueue: [videoSchema],
-    historyQueue: [videoSchema],
-    volume: { type: Number, default: 50 },
-    playingNow: { type: videoSchema, default: null },
-    lastActivity: { type: Number, required: true },
-    creatorId: { type: String, required: true },
-    isPlaying: { type: Boolean, default: false },
-    currentTime: { type: Number, default: 0 },
-});
+const roomSchema = new mongoose.Schema<Room>(
+    {
+        id: {
+            type: String,
+            required: true,
+            unique: true,
+            index: true,
+        },
+        password: {
+            type: String,
+            required: false,
+            default: null,
+        },
+        clients: [
+            {
+                type: String,
+                index: true,
+            },
+        ],
+        videoQueue: [videoSchema],
+        historyQueue: [videoSchema],
+        volume: {
+            type: Number,
+            default: 50,
+            min: 0,
+            max: 100,
+        },
+        playingNow: {
+            type: videoSchema,
+            default: null,
+        },
+        lastActivity: {
+            type: Number,
+            required: true,
+        },
+        creatorId: {
+            type: String,
+            required: true,
+            index: true,
+        },
+        isPlaying: {
+            type: Boolean,
+            default: false,
+        },
+        currentTime: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+    },
+    {
+        timestamps: true,
+        // Optimize read performance
+        toJSON: {
+            virtuals: true,
+            getters: true,
+        },
+    },
+);
+
+// Index for cleanup jobs (by lastActivity)
+roomSchema.index({ lastActivity: 1 });
+
+// Compound index for query optimization
+roomSchema.index({ id: 1, creatorId: 1 });
 
 export const RoomModel = mongoose.model<Room>('Room', roomSchema);
