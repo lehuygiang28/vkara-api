@@ -10,8 +10,8 @@ const INACTIVE_TIMEOUT = parseInt(process.env.INACTIVE_TIMEOUT || '300') * 1000;
 const ORPHANED_CLIENT_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
 
 // Video playback timeout settings
-const MIN_VIDEO_TIMEOUT_HOURS = parseFloat(process.env.MIN_VIDEO_TIMEOUT_HOURS || '1'); // default 1 hour minimum
-const VIDEO_DURATION_MULTIPLIER = parseFloat(process.env.VIDEO_DURATION_MULTIPLIER || '3'); // default 3x video duration
+const MIN_VIDEO_TIMEOUT_HOURS = parseFloat(process.env.MIN_VIDEO_TIMEOUT_HOURS || '2'); // default 2 hour minimum
+const VIDEO_DURATION_MULTIPLIER = parseFloat(process.env.VIDEO_DURATION_MULTIPLIER || '5'); // default 5x video duration
 
 const logger = createContextLogger('Queue/Cleanup');
 
