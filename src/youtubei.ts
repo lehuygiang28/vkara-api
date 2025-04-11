@@ -1,9 +1,8 @@
 import { Elysia, t } from 'elysia';
 import { Redis } from 'ioredis';
 import { Queue, Worker } from 'bullmq';
-import { Client, OAuth, type VideoCompact, type SearchResult } from 'youtubei';
+import { Client, type VideoCompact, type SearchResult, type VideoRelated } from 'youtubei';
 import youtube from 'youtube-sr';
-import youtubeSearch from 'youtube-search-api';
 
 import { createContextLogger } from '@/utils/logger';
 import type { YouTubeVideo } from './types';
@@ -28,8 +27,17 @@ const redis = new Redis({
     maxRetriesPerRequest: null,
 });
 
+// Define key prefixes to distinguish between different types of cached data
+const REDIS_KEY_PREFIXES = {
+    SEARCH: 'search-instance:',
+    RELATED: 'related-instance:',
+};
+
 // Cleanup time in milliseconds (5 minutes)
 const CLEANUP_TIMEOUT = 5 * 60 * 1000;
+
+// Maximum number of instances to cache per type
+const MAX_INSTANCES_PER_TYPE = 1000;
 
 // Create the cleanup queue
 const cleanupQueue = new Queue('search-instance-cleanup', { connection: redis });
@@ -41,28 +49,87 @@ interface SearchInstanceWithTimestamp {
 
 // Store SearchResult instances in memory
 const searchInstances = new Map<string, SearchInstanceWithTimestamp>();
+const relatedInstances = new Map<string, SearchInstanceWithTimestamp>();
 
-// Cleanup function to remove old instances
+// Helper function to get full Redis key from a continuation token and prefix
+const getRedisKey = (prefix: string, continuation: string): string => `${prefix}${continuation}`;
+
+// Helper function to store continuation token with automatic expiration
+const storeContinuation = async (
+    prefix: string,
+    continuation: string,
+    instancesMap: Map<string, SearchInstanceWithTimestamp>,
+    instance: SearchResult<'video'> | VideoRelated,
+    redisClient: Redis,
+): Promise<void> => {
+    // Store in memory
+    instancesMap.set(continuation, {
+        instance: instance as SearchResult<'video'>,
+        timestamp: Date.now(),
+    });
+
+    // Store in Redis with automatic expiration
+    await redisClient.set(
+        getRedisKey(prefix, continuation),
+        Date.now().toString(),
+        'EX',
+        Math.floor(CLEANUP_TIMEOUT / 1000), // Convert ms to seconds for Redis TTL
+    );
+
+    // Check if we need to clean up oldest entries when reaching the limit
+    if (instancesMap.size > MAX_INSTANCES_PER_TYPE) {
+        // Sort by timestamp and remove oldest entries
+        const entries = Array.from(instancesMap.entries());
+        entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+
+        // Remove 10% of the oldest entries
+        const entriesToRemove = Math.ceil(MAX_INSTANCES_PER_TYPE * 0.1);
+        const keysToRemove = entries.slice(0, entriesToRemove).map((entry) => entry[0]);
+
+        for (const key of keysToRemove) {
+            instancesMap.delete(key);
+            await redisClient.del(getRedisKey(prefix, key));
+        }
+
+        const logPrefix = prefix === REDIS_KEY_PREFIXES.SEARCH ? 'Search' : 'Related';
+        youtubeiLogger.info(
+            `${logPrefix} cache limit reached. Removed ${keysToRemove.length} oldest entries.`,
+        );
+    }
+};
+
+// Cleanup function to remove old instances - now only for backup since we use Redis TTL
 const cleanupOldInstances = async () => {
     const now = Date.now();
-    let cleaned = 0;
+    let cleanedSearch = 0;
+    let cleanedRelated = 0;
 
-    const keys = await redis.keys('search-instance:*');
-    for (const key of keys) {
-        const value = await redis.get(key);
-        if (value) {
-            const timestamp = parseInt(value);
-            if (now - timestamp > CLEANUP_TIMEOUT) {
-                await redis.del(key);
-                searchInstances.delete(key.replace('search-instance:', ''));
-                cleaned++;
-            }
+    // Clean up search instances
+    for (const [key, value] of searchInstances.entries()) {
+        if (now - value.timestamp > CLEANUP_TIMEOUT) {
+            searchInstances.delete(key);
+            cleanedSearch++;
         }
     }
 
-    if (cleaned > 0) {
-        youtubeiLogger.info(`Cleaned up ${cleaned} expired search instances`);
+    // Clean up related instances
+    for (const [key, value] of relatedInstances.entries()) {
+        if (now - value.timestamp > CLEANUP_TIMEOUT) {
+            relatedInstances.delete(key);
+            cleanedRelated++;
+        }
     }
+
+    if (cleanedSearch > 0 || cleanedRelated > 0) {
+        youtubeiLogger.info(
+            `Memory cleanup: ${cleanedSearch} search instances, ${cleanedRelated} related instances`,
+        );
+    }
+
+    // Log current cache size
+    youtubeiLogger.debug(
+        `Current cache size: ${searchInstances.size} search, ${relatedInstances.size} related`,
+    );
 };
 
 // Create a worker to process cleanup jobs
@@ -109,11 +176,13 @@ export const searchYoutubeiElysia = new Elysia({})
     .state('youtubeiClient', youtubei)
     .state('redisClient', redis)
     .state('searchInstances', searchInstances)
+    .state('relatedInstances', relatedInstances)
+    .state('redisKeyPrefixes', REDIS_KEY_PREFIXES)
     .post(
         '/search',
         async ({
             body: { query, continuation },
-            store: { youtubeiClient, redisClient, searchInstances },
+            store: { youtubeiClient, redisClient, searchInstances, redisKeyPrefixes },
         }): Promise<{
             items: YouTubeVideo[];
             continuation?: string | null;
@@ -121,16 +190,17 @@ export const searchYoutubeiElysia = new Elysia({})
             let results: SearchResult<'video'> | undefined;
             let newItems: VideoCompact[] = [];
             const processedVideoIds = new Set<string>();
+            const prefix = redisKeyPrefixes.SEARCH;
 
             if (
                 continuation &&
                 (searchInstances.has(continuation) ||
-                    (await redisClient.exists(`search-instance:${continuation}`)))
+                    (await redisClient.exists(getRedisKey(prefix, continuation))))
             ) {
                 logger.info(`Continuing search: "${query}"`);
                 if (!searchInstances.has(continuation)) {
                     const timestamp = parseInt(
-                        (await redisClient.get(`search-instance:${continuation}`)) || '0',
+                        (await redisClient.get(getRedisKey(prefix, continuation))) || '0',
                     );
                     if (timestamp) {
                         results = await youtubeiClient.search(query, {
@@ -159,15 +229,14 @@ export const searchYoutubeiElysia = new Elysia({})
 
                     if (results.continuation) {
                         searchInstances.delete(continuation);
-                        searchInstances.set(results.continuation, {
-                            instance: results,
-                            timestamp: Date.now(),
-                        });
-                        await redisClient.set(
-                            `search-instance:${results.continuation}`,
-                            Date.now().toString(),
+                        await storeContinuation(
+                            prefix,
+                            results.continuation,
+                            searchInstances,
+                            results,
+                            redisClient,
                         );
-                        await redisClient.del(`search-instance:${continuation}`);
+                        await redisClient.del(getRedisKey(prefix, continuation));
                     }
                 }
             }
@@ -185,13 +254,12 @@ export const searchYoutubeiElysia = new Elysia({})
             }
 
             if (results?.continuation) {
-                searchInstances.set(results.continuation, {
-                    instance: results,
-                    timestamp: Date.now(),
-                });
-                await redisClient.set(
-                    `search-instance:${results.continuation}`,
-                    Date.now().toString(),
+                await storeContinuation(
+                    prefix,
+                    results.continuation,
+                    searchInstances,
+                    results,
+                    redisClient,
                 );
             }
 
@@ -259,54 +327,120 @@ export const searchYoutubeiElysia = new Elysia({})
     .post(
         '/related',
         async ({
-            body: { videoId },
-            store: { youtubeiClient },
-        }): Promise<{ items: YouTubeVideo[] }> => {
+            body: { videoId, continuation },
+            store: { youtubeiClient, redisClient, relatedInstances, redisKeyPrefixes },
+        }): Promise<{
+            items: YouTubeVideo[];
+            continuation?: string | null;
+        }> => {
             try {
-                const suggestions = (await youtubeSearch.GetVideoDetails(videoId)).suggestion;
-                if (!suggestions || suggestions.length === 0) {
-                    return { items: [] };
+                let results: VideoRelated | undefined;
+                let newItems: VideoCompact[] = [];
+                const processedVideoIds = new Set<string>();
+                const prefix = redisKeyPrefixes.RELATED;
+
+                if (
+                    continuation &&
+                    (relatedInstances.has(continuation) ||
+                        (await redisClient.exists(getRedisKey(prefix, continuation))))
+                ) {
+                    logger.info(`Continuing related videos for: "${videoId}"`);
+                    if (!relatedInstances.has(continuation)) {
+                        const timestamp = parseInt(
+                            (await redisClient.get(getRedisKey(prefix, continuation))) || '0',
+                        );
+                        if (timestamp) {
+                            const video = await youtubeiClient.getVideo(videoId);
+                            if (video && video.related) {
+                                results = video.related;
+                                results.continuation = continuation;
+                                relatedInstances.set(continuation, {
+                                    instance: results as unknown as SearchResult<'video'>,
+                                    timestamp: timestamp,
+                                });
+                            }
+                        }
+                    } else {
+                        const stored = relatedInstances.get(continuation)!;
+                        results = stored.instance as unknown as VideoRelated;
+                    }
+
+                    if (results) {
+                        const currentLength = results.items.length;
+                        await results.next();
+                        const allNewItems = results.items
+                            .slice(currentLength)
+                            .filter((item): item is VideoCompact => 'duration' in item);
+
+                        // Filter out duplicate videos
+                        newItems = allNewItems.filter((item) => !processedVideoIds.has(item.id));
+                        newItems.forEach((item) => processedVideoIds.add(item.id));
+
+                        if (results.continuation) {
+                            relatedInstances.delete(continuation);
+                            await storeContinuation(
+                                prefix,
+                                results.continuation,
+                                relatedInstances,
+                                results,
+                                redisClient,
+                            );
+                            await redisClient.del(getRedisKey(prefix, continuation));
+                        }
+                    }
                 }
 
-                const suggestionsEmbeddable = await Promise.all(
-                    suggestions.map(async (item) => {
-                        if (!item?.id) {
-                            return null;
-                        }
-                        const isEmbeddable = await checkEmbeddable(item.id);
-                        return isEmbeddable ? item : null;
-                    }),
-                );
+                if (!results) {
+                    logger.info(`Getting related videos for: "${videoId}"`);
+                    const video = await youtubeiClient.getVideo(videoId);
+                    if (video && video.related) {
+                        results = video.related;
 
-                const videoPromises = suggestionsEmbeddable.map(async (item) => {
-                    try {
-                        if (!item) {
-                            return null;
-                        }
-                        return mapYoutubeiVideo(
-                            (await youtubeiClient.findOne(item?.id, {
-                                type: 'video',
-                            })) as VideoCompact,
-                        );
-                    } catch (error) {
-                        logger.error(`Error processing video ${item?.id}:`, { error });
-                        return null;
+                        // Filter out duplicate videos and ensure we only have video items
+                        newItems = results.items
+                            .filter((item): item is VideoCompact => 'duration' in item)
+                            .filter((item) => !processedVideoIds.has(item.id));
+
+                        newItems.forEach((item) => processedVideoIds.add(item.id));
                     }
-                });
-                const videos = await Promise.all(videoPromises);
-                const embeddableVideos = videos.filter(
-                    (video): video is YouTubeVideo => video !== null,
+                }
+
+                if (results?.continuation) {
+                    await storeContinuation(
+                        prefix,
+                        results.continuation,
+                        relatedInstances,
+                        results,
+                        redisClient,
+                    );
+                }
+
+                const embeddableVideos = await Promise.all(
+                    newItems.map(async (item) => {
+                        const video = mapYoutubeiVideo(item);
+                        const isEmbeddable = await checkEmbeddable(video.id);
+                        return isEmbeddable ? video : null;
+                    }),
+                ).then((videos) =>
+                    videos.filter((video): video is NonNullable<typeof video> => video !== null),
                 );
 
-                return { items: embeddableVideos };
+                // Log current cache size
+                logger.debug(`Current related instances cache size: ${relatedInstances.size}`);
+
+                return {
+                    items: embeddableVideos,
+                    continuation: results?.continuation,
+                };
             } catch (error) {
                 logger.error('Failed to get related videos', { error });
-                return { items: [] };
+                return { items: [], continuation: null };
             }
         },
         {
             body: t.Object({
                 videoId: t.String(),
+                continuation: t.Optional(t.String()),
             }),
         },
     )
