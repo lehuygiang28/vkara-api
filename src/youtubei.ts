@@ -353,7 +353,7 @@ export const searchYoutubeiElysia = new Elysia({})
                             const video = await youtubeiClient.getVideo(videoId);
                             if (video && video.related) {
                                 results = video.related;
-                                results.continuation = continuation;
+                                results.continuation = video?.related?.continuation || continuation;
                                 relatedInstances.set(continuation, {
                                     instance: results as unknown as SearchResult<'video'>,
                                     timestamp: timestamp,
